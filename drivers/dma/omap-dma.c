@@ -16,6 +16,8 @@
 #include <linux/platform_device.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
+#include <linux/of_dma.h>
+#include <linux/of_device.h>
 
 #include "virt-dma.h"
 
@@ -66,6 +68,8 @@ static const unsigned es_bytes[] = {
 	[OMAP_DMA_DATA_TYPE_S16] = 2,
 	[OMAP_DMA_DATA_TYPE_S32] = 4,
 };
+
+static struct of_dma_filter_info info;
 
 static inline struct omap_dmadev *to_omap_dma_dev(struct dma_device *d)
 {
@@ -621,8 +625,23 @@ static int omap_dma_probe(struct platform_device *pdev)
 		pr_warn("OMAP-DMA: failed to register slave DMA engine device: %d\n",
 			rc);
 		omap_dma_free(od);
+		return rc;
 	} else {
 		platform_set_drvdata(pdev, od);
+	}
+
+	if (of_have_populated_dt()) {
+		info.dma_cap = od->ddev.cap_mask;
+		info.filter_fn = omap_dma_filter_fn;
+
+		/* Device-tree DMA controller registration */
+		rc = of_dma_controller_register(pdev->dev.of_node,
+				of_dma_simple_xlate, &info);
+		if (rc) {
+			pr_err("OMAP-DMA: failed to register DMA controller\n");
+			dma_async_device_unregister(&od->ddev);
+			omap_dma_free(od);
+		}
 	}
 
 	dev_info(&pdev->dev, "OMAP DMA engine driver\n");
@@ -634,11 +653,20 @@ static int omap_dma_remove(struct platform_device *pdev)
 {
 	struct omap_dmadev *od = platform_get_drvdata(pdev);
 
+	if (of_have_populated_dt())
+		of_dma_controller_free(pdev->dev.of_node);
+
 	dma_async_device_unregister(&od->ddev);
 	omap_dma_free(od);
 
 	return 0;
 }
+
+static const struct of_device_id omap_dma_match[] = {
+	{ .compatible = "ti,omap-sdma", },
+	{},
+};
+MODULE_DEVICE_TABLE(of, omap_dma_match);
 
 static struct platform_driver omap_dma_driver = {
 	.probe	= omap_dma_probe,
@@ -646,6 +674,7 @@ static struct platform_driver omap_dma_driver = {
 	.driver = {
 		.name = "omap-dma-engine",
 		.owner = THIS_MODULE,
+		.of_match_table = of_match_ptr(omap_dma_match)
 	},
 };
 
@@ -673,7 +702,7 @@ static int omap_dma_init(void)
 {
 	int rc = platform_driver_register(&omap_dma_driver);
 
-	if (rc == 0) {
+	if ((rc == 0) && (!of_have_populated_dt())) {
 		pdev = platform_device_register_full(&omap_dma_dev_info);
 		if (IS_ERR(pdev)) {
 			platform_driver_unregister(&omap_dma_driver);

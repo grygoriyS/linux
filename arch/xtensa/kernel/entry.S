@@ -219,6 +219,7 @@ _user_exception:
 
 	j	common_exception
 
+ENDPROC(user_exception)
 
 /*
  * First-level exit handler for kernel exceptions
@@ -654,6 +655,8 @@ common_exception_exit:
 	l32i	a1, a1, PT_AREG1
 	rfde
 
+ENDPROC(kernel_exception)
+
 /*
  * Debug exception handler.
  *
@@ -714,6 +717,7 @@ ENTRY(debug_exception)
 	/* Debug exception while in exception mode. */
 1:	j	1b	// FIXME!!
 
+ENDPROC(debug_exception)
 
 /*
  * We get here in case of an unrecoverable exception.
@@ -764,6 +768,7 @@ ENTRY(unrecoverable_exception)
 
 1:	j	1b
 
+ENDPROC(unrecoverable_exception)
 
 /* -------------------------- FAST EXCEPTION HANDLERS ----------------------- */
 
@@ -942,6 +947,7 @@ ENTRY(fast_alloca)
 	l32i	a2, a2, PT_AREG2
 	rfe
 
+ENDPROC(fast_alloca)
 
 /*
  * fast system calls.
@@ -979,6 +985,8 @@ ENTRY(fast_syscall_kernel)
 
 	j	kernel_exception
 
+ENDPROC(fast_syscall_kernel)
+
 ENTRY(fast_syscall_user)
 
 	/* Skip syscall. */
@@ -996,6 +1004,8 @@ ENTRY(fast_syscall_user)
 
 	j	user_exception
 
+ENDPROC(fast_syscall_user)
+
 ENTRY(fast_syscall_unrecoverable)
 
         /* Restore all states. */
@@ -1008,7 +1018,7 @@ ENTRY(fast_syscall_unrecoverable)
         movi    a0, unrecoverable_exception
         callx0  a0
 
-
+ENDPROC(fast_syscall_unrecoverable)
 
 /*
  * sysxtensa syscall handler
@@ -1114,7 +1124,7 @@ CATCH
 	movi	a2, -EINVAL
 	rfe
 
-
+ENDPROC(fast_syscall_xtensa)
 
 
 /* fast_syscall_spill_registers.
@@ -1172,6 +1182,8 @@ ENTRY(fast_syscall_spill_registers)
 
 	movi	a2, 0
 	rfe
+
+ENDPROC(fast_syscall_spill_registers)
 
 /* Fixup handler.
  *
@@ -1477,6 +1489,8 @@ ENTRY(_spill_registers)
 	callx0	a0		# should not return
 1:	j	1b
 
+ENDPROC(_spill_registers)
+
 #ifdef CONFIG_MMU
 /*
  * We should never get here. Bail out!
@@ -1487,6 +1501,8 @@ ENTRY(fast_second_level_miss_double_kernel)
 1:	movi	a0, unrecoverable_exception
 	callx0	a0		# should not return
 1:	j	1b
+
+ENDPROC(fast_second_level_miss_double_kernel)
 
 /* First-level entry handler for user, kernel, and double 2nd-level
  * TLB miss exceptions.  Note that for now, user and kernel miss
@@ -1695,6 +1711,7 @@ ENTRY(fast_second_level_miss)
 	j	_kernel_exception
 1:	j	_user_exception
 
+ENDPROC(fast_second_level_miss)
 
 /*
  * StoreProhibitedException
@@ -1790,6 +1807,9 @@ ENTRY(fast_store_prohibited)
 	bbsi.l	a2, PS_UM_BIT, 1f
 	j	_kernel_exception
 1:	j	_user_exception
+
+ENDPROC(fast_store_prohibited)
+
 #endif /* CONFIG_MMU */
 
 /*
@@ -1800,6 +1820,7 @@ ENTRY(fast_store_prohibited)
  */
 
 ENTRY(system_call)
+
 	entry	a1, 32
 
 	/* regs->syscall = regs->areg[2] */
@@ -1843,6 +1864,8 @@ ENTRY(system_call)
 	mov	a6, a2
 	callx4	a4
 	retw
+
+ENDPROC(system_call)
 
 
 /*
@@ -1912,6 +1935,7 @@ ENTRY(_switch_to)
 
 	retw
 
+ENDPROC(_switch_to)
 
 ENTRY(ret_from_fork)
 
@@ -1926,6 +1950,8 @@ ENTRY(ret_from_fork)
 	callx4	a4
 
 	j	common_exception_return
+
+ENDPROC(ret_from_fork)
 
 /*
  * Kernel thread creation helper

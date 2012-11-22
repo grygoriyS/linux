@@ -663,7 +663,7 @@ static struct nfs4_slot *nfs4_find_or_create_slot(struct nfs4_slot_table  *tbl,
 			return slot;
 		p = &slot->next;
 	}
-	return NULL;
+	return ERR_PTR(-ENOMEM);
 }
 
 /*
@@ -677,7 +677,7 @@ static struct nfs4_slot *nfs4_find_or_create_slot(struct nfs4_slot_table  *tbl,
  */
 static struct nfs4_slot *nfs4_alloc_slot(struct nfs4_slot_table *tbl)
 {
-	struct nfs4_slot *ret = NULL;
+	struct nfs4_slot *ret = ERR_PTR(-EBUSY);
 	u32 slotid;
 
 	dprintk("--> %s used_slots=%04lx highest_used=%u max_slots=%u\n",
@@ -687,7 +687,7 @@ static struct nfs4_slot *nfs4_alloc_slot(struct nfs4_slot_table *tbl)
 	if (slotid > tbl->max_slotid)
 		goto out;
 	ret = nfs4_find_or_create_slot(tbl, slotid, 1, GFP_NOWAIT);
-	if (ret == NULL)
+	if (IS_ERR(ret))
 		goto out;
 	__set_bit(slotid, tbl->used_slots);
 	if (slotid > tbl->highest_used_slotid ||
@@ -699,7 +699,7 @@ static struct nfs4_slot *nfs4_alloc_slot(struct nfs4_slot_table *tbl)
 out:
 	dprintk("<-- %s used_slots=%04lx highest_used=%d slotid=%d \n",
 		__func__, tbl->used_slots[0], tbl->highest_used_slotid,
-		ret ? ret->slot_nr : -1);
+		!IS_ERR(ret) ? ret->slot_nr : -1);
 	return ret;
 }
 
@@ -728,6 +728,8 @@ int nfs41_setup_sequence(struct nfs4_session *session,
 
 	tbl = &session->fc_slot_table;
 
+	task->tk_timeout = 0;
+
 	spin_lock(&tbl->slot_tbl_lock);
 	if (test_bit(NFS4_SESSION_DRAINING, &session->session_state) &&
 	    !rpc_task_has_priority(task, RPC_PRIORITY_PRIVILEGED)) {
@@ -747,7 +749,10 @@ int nfs41_setup_sequence(struct nfs4_session *session,
 	}
 
 	slot = nfs4_alloc_slot(tbl);
-	if (slot == NULL) {
+	if (IS_ERR(slot)) {
+		/* If out of memory, try again in 1/4 second */
+		if (slot == ERR_PTR(-ENOMEM))
+			task->tk_timeout = HZ >> 2;
 		rpc_sleep_on(&tbl->slot_tbl_waitq, task, NULL);
 		spin_unlock(&tbl->slot_tbl_lock);
 		dprintk("<-- %s: no free slots\n", __func__);
@@ -5779,7 +5784,7 @@ static int nfs4_grow_slot_table(struct nfs4_slot_table *tbl,
 {
 	if (max_reqs <= tbl->max_slots)
 		return 0;
-	if (nfs4_find_or_create_slot(tbl, max_reqs - 1, ivalue, GFP_NOFS))
+	if (!IS_ERR(nfs4_find_or_create_slot(tbl, max_reqs - 1, ivalue, GFP_NOFS)))
 		return 0;
 	return -ENOMEM;
 }

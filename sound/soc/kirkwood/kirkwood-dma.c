@@ -22,12 +22,16 @@
 #include "kirkwood.h"
 
 #define KIRKWOOD_RATES \
-	(SNDRV_PCM_RATE_44100 | \
-	 SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_96000)
+	(SNDRV_PCM_RATE_8000_192000 |		\
+	 SNDRV_PCM_RATE_CONTINUOUS |		\
+	 SNDRV_PCM_RATE_KNOT)
+
 #define KIRKWOOD_FORMATS \
 	(SNDRV_PCM_FMTBIT_S16_LE | \
 	 SNDRV_PCM_FMTBIT_S24_LE | \
-	 SNDRV_PCM_FMTBIT_S32_LE)
+	 SNDRV_PCM_FMTBIT_S32_LE | \
+	 SNDRV_PCM_FMTBIT_IEC958_SUBFRAME_LE | \
+	 SNDRV_PCM_FMTBIT_IEC958_SUBFRAME_BE)
 
 struct kirkwood_dma_priv {
 	struct snd_pcm_substream *play_stream;
@@ -43,10 +47,10 @@ static struct snd_pcm_hardware kirkwood_dma_snd_hw = {
 		 SNDRV_PCM_INFO_PAUSE),
 	.formats		= KIRKWOOD_FORMATS,
 	.rates			= KIRKWOOD_RATES,
-	.rate_min		= 44100,
-	.rate_max		= 96000,
+	.rate_min		= 8000,
+	.rate_max		= 384000,
 	.channels_min		= 1,
-	.channels_max		= 2,
+	.channels_max		= 8,
 	.buffer_bytes_max	= KIRKWOOD_SND_MAX_PERIOD_BYTES * KIRKWOOD_SND_MAX_PERIODS,
 	.period_bytes_min	= KIRKWOOD_SND_MIN_PERIOD_BYTES,
 	.period_bytes_max	= KIRKWOOD_SND_MAX_PERIOD_BYTES,
@@ -71,7 +75,6 @@ static irqreturn_t kirkwood_dma_irq(int irq, void *dev_id)
 		printk(KERN_WARNING "%s: got err interrupt 0x%lx\n",
 				__func__, cause);
 		writel(cause, priv->io + KIRKWOOD_ERR_CAUSE);
-		return IRQ_HANDLED;
 	}
 
 	/* we've enabled only bytes interrupts ... */
@@ -178,7 +181,7 @@ static int kirkwood_dma_open(struct snd_pcm_substream *substream)
 	}
 
 	dram = mv_mbus_dram_info();
-	addr = virt_to_phys(substream->dma_buffer.area);
+	addr = substream->dma_buffer.addr;
 	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
 		prdata->play_stream = substream;
 		kirkwood_dma_conf_mbus_windows(priv->io,

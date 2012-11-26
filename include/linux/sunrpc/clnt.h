@@ -70,6 +70,7 @@ struct rpc_clnt {
 #define RPC_MAXVERSION		4
 struct rpc_program {
 	const char *		name;		/* protocol name */
+	const char *		service_name;	/* protocol service name */
 	u32			number;		/* program number */
 	unsigned int		nrvers;		/* number of versions */
 	const struct rpc_version **	version;	/* version array */

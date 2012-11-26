@@ -612,6 +612,7 @@ static struct rpc_stat		nlm_rpc_stats;
 
 const struct rpc_program	nlm_program = {
 		.name		= "lockd",
+		.service_name	= "nlockmgr",
 		.number		= NLM_PROGRAM,
 		.nrvers		= ARRAY_SIZE(nlm_versions),
 		.version	= nlm_versions,

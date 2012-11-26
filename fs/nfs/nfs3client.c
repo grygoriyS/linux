@@ -10,6 +10,8 @@ static const struct rpc_version *nfsacl_version[] = {
 
 const struct rpc_program nfsacl_program = {
 	.name			= "nfsacl",
+	.service_name		= "nfs",	/* nfsacl belongs to the nfs
+						 * service on the server. */
 	.number			= NFS_ACL_PROGRAM,
 	.nrvers			= ARRAY_SIZE(nfsacl_version),
 	.version		= nfsacl_version,

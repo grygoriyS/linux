@@ -516,6 +516,7 @@ static struct rpc_stat mnt_stats;
 
 static const struct rpc_program mnt_program = {
 	.name		= "mount",
+	.service_name	= "mountd",
 	.number		= NFS_MNT_PROGRAM,
 	.nrvers		= ARRAY_SIZE(mnt_version),
 	.version	= mnt_version,

@@ -72,6 +72,7 @@ static const struct rpc_version *nfs_version[5] = {
 
 const struct rpc_program nfs_program = {
 	.name			= "nfs",
+	.service_name		= "nfs",
 	.number			= NFS_PROGRAM,
 	.nrvers			= ARRAY_SIZE(nfs_version),
 	.version		= nfs_version,

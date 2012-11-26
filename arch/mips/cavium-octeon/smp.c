@@ -68,6 +68,11 @@ void octeon_send_ipi_single(int cpu, unsigned int action)
 	cvmx_write_csr(CVMX_CIU_MBOX_SETX(coreid), action);
 }
 
+void core_send_ipi(int cpu, unsigned int action)
+{
+	octeon_send_ipi_single(cpu, action);
+}
+
 static inline void octeon_send_ipi_mask(const struct cpumask *mask,
 					unsigned int action)
 {

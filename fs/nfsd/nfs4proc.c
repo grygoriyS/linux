@@ -40,6 +40,7 @@
 #include "xdr4.h"
 #include "vfs.h"
 #include "current_stateid.h"
+#include "netns.h"
 
 #define NFSDDBG_FACILITY		NFSDDBG_PROC
 
@@ -304,6 +305,8 @@ nfsd4_open(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 {
 	__be32 status;
 	struct nfsd4_compoundres *resp;
+	struct net *net = SVC_NET(rqstp);
+	struct nfsd_net *nn = net_generic(net, nfsd_net_id);
 
 	dprintk("NFSD: nfsd4_open filename %.*s op_openowner %p\n",
 		(int)open->op_fname.len, open->op_fname.data,
@@ -331,7 +334,7 @@ nfsd4_open(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 
 	/* check seqid for replay. set nfs4_owner */
 	resp = rqstp->rq_resp;
-	status = nfsd4_process_open1(&resp->cstate, open);
+	status = nfsd4_process_open1(&resp->cstate, open, nn);
 	if (status == nfserr_replay_me) {
 		struct nfs4_replay *rp = &open->op_openowner->oo_owner.so_replay;
 		fh_put(&cstate->current_fh);
@@ -354,10 +357,10 @@ nfsd4_open(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 	/* Openowner is now set, so sequence id will get bumped.  Now we need
 	 * these checks before we do any creates: */
 	status = nfserr_grace;
-	if (locks_in_grace(SVC_NET(rqstp)) && open->op_claim_type != NFS4_OPEN_CLAIM_PREVIOUS)
+	if (locks_in_grace(net) && open->op_claim_type != NFS4_OPEN_CLAIM_PREVIOUS)
 		goto out;
 	status = nfserr_no_grace;
-	if (!locks_in_grace(SVC_NET(rqstp)) && open->op_claim_type == NFS4_OPEN_CLAIM_PREVIOUS)
+	if (!locks_in_grace(net) && open->op_claim_type == NFS4_OPEN_CLAIM_PREVIOUS)
 		goto out;
 
 	switch (open->op_claim_type) {
@@ -370,7 +373,9 @@ nfsd4_open(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 			break;
 		case NFS4_OPEN_CLAIM_PREVIOUS:
 			open->op_openowner->oo_flags |= NFS4_OO_CONFIRMED;
-			status = nfs4_check_open_reclaim(&open->op_clientid, cstate->minorversion);
+			status = nfs4_check_open_reclaim(&open->op_clientid,
+							 cstate->minorversion,
+							 nn);
 			if (status)
 				goto out;
 		case NFS4_OPEN_CLAIM_FH:
@@ -1665,6 +1670,12 @@ static struct nfsd4_operation nfsd4_ops[] = {
 				| OP_MODIFIES_SOMETHING,
 		.op_name = "OP_EXCHANGE_ID",
 		.op_rsize_bop = (nfsd4op_rsize)nfsd4_exchange_id_rsize,
+	},
+	[OP_BACKCHANNEL_CTL] = {
+		.op_func = (nfsd4op_func)nfsd4_backchannel_ctl,
+		.op_flags = ALLOWED_WITHOUT_FH | OP_MODIFIES_SOMETHING,
+		.op_name = "OP_BACKCHANNEL_CTL",
+		.op_rsize_bop = (nfsd4op_rsize)nfsd4_only_status_rsize,
 	},
 	[OP_BIND_CONN_TO_SESSION] = {
 		.op_func = (nfsd4op_func)nfsd4_bind_conn_to_session,

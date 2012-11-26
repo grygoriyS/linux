@@ -281,6 +281,7 @@ static void __cpuinit smp_store_cpu_info(unsigned int cpuid)
 	struct cpuinfo_arm *cpu_info = &per_cpu(cpu_data, cpuid);
 
 	cpu_info->loops_per_jiffy = loops_per_jiffy;
+	cpu_info->cpuid = read_cpuid_id();
 
 	store_cpu_topology(cpuid);
 }
@@ -419,6 +420,11 @@ void __init set_smp_cross_call(void (*fn)(const struct cpumask *, unsigned int))
 void arch_send_call_function_ipi_mask(const struct cpumask *mask)
 {
 	smp_cross_call(mask, IPI_CALL_FUNC);
+}
+
+void arch_send_wakeup_ipi_mask(const struct cpumask *mask)
+{
+	smp_cross_call(mask, IPI_WAKEUP);
 }
 
 void arch_send_call_function_single_ipi(int cpu)

@@ -1799,6 +1799,11 @@ cifs_parse_mount_options(const char *mountdata, const char *devname,
 		goto cifs_parse_mount_err;
 	}
 #endif
+	if (!vol->UNC) {
+		cERROR(1, "CIFS mount error: No UNC path (e.g. -o "
+			"unc=\\\\192.168.1.100\\public) specified");
+		goto cifs_parse_mount_err;
+	}
 
 	if (vol->UNCip == NULL)
 		vol->UNCip = &vol->UNC[2];
@@ -2070,17 +2075,6 @@ cifs_get_tcp_session(struct smb_vol *volume_info)
 			rc = -EINVAL;
 			goto out_err;
 		}
-	} else if (volume_info->UNCip) {
-		/* BB using ip addr as tcp_ses name to connect to the
-		   DFS root below */
-		cERROR(1, "Connecting to DFS root not implemented yet");
-		rc = -EINVAL;
-		goto out_err;
-	} else /* which tcp_sess DFS root would we conect to */ {
-		cERROR(1, "CIFS mount error: No UNC path (e.g. -o "
-			"unc=//192.168.1.100/public) specified");
-		rc = -EINVAL;
-		goto out_err;
 	}
 
 	/* see if we already have a matching tcp_ses */
@@ -2397,8 +2391,6 @@ cifs_set_cifscreds(struct smb_vol *vol __attribute__((unused)),
 }
 #endif /* CONFIG_KEYS */
 
-static bool warned_on_ntlm;  /* globals init to false automatically */
-
 static struct cifs_ses *
 cifs_get_smb_ses(struct TCP_Server_Info *server, struct smb_vol *volume_info)
 {
@@ -2475,14 +2467,6 @@ cifs_get_smb_ses(struct TCP_Server_Info *server, struct smb_vol *volume_info)
 	ses->cred_uid = volume_info->cred_uid;
 	ses->linux_uid = volume_info->linux_uid;
 
-	/* ntlmv2 is much stronger than ntlm security, and has been broadly
-	supported for many years, time to update default security mechanism */
-	if ((volume_info->secFlg == 0) && warned_on_ntlm == false) {
-		warned_on_ntlm = true;
-		cERROR(1, "default security mechanism requested.  The default "
-			"security mechanism will be upgraded from ntlm to "
-			"ntlmv2 in kernel release 3.3");
-	}
 	ses->overrideSecFlg = volume_info->secFlg;
 
 	mutex_lock(&ses->session_mutex);
@@ -2735,9 +2719,6 @@ cifs_match_super(struct super_block *sb, void *data)
 	tcp_srv = ses->server;
 
 	volume_info = mnt_data->vol;
-
-	if (!volume_info->UNCip || !volume_info->UNC)
-		goto out;
 
 	rc = cifs_fill_sockaddr((struct sockaddr *)&addr,
 				volume_info->UNCip,

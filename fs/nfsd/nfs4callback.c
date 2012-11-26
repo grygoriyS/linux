@@ -618,6 +618,7 @@ static struct rpc_stat cb_stats = {
 #define NFS4_CALLBACK 0x40000000
 static const struct rpc_program cb_program = {
 	.name			= "nfs4_cb",
+	.service_name		= "nfs",	/* See RFC3530, Section 3.4 */
 	.number			= NFS4_CALLBACK,
 	.nrvers			= ARRAY_SIZE(nfs_cb_version),
 	.version		= nfs_cb_version,

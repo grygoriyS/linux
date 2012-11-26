@@ -185,23 +185,19 @@ struct nfs4_channel_attrs {
 	u32			max_reqs;
 };
 
-/* nfs41 sessions slot seqid */
-struct nfs4_slot {
-	u32		 	seq_nr;
-};
-
+struct nfs4_slot;
 struct nfs4_sequence_args {
-	struct nfs4_session	*sa_session;
-	u32			sa_slotid;
-	u8			sa_cache_this;
+	struct nfs4_slot	*sa_slot;
+	u8			sa_cache_this : 1,
+				sa_privileged : 1;
 };
 
 struct nfs4_sequence_res {
-	struct nfs4_session	*sr_session;
 	struct nfs4_slot	*sr_slot;	/* slot used to send request */
 	int			sr_status;	/* sequence operation status */
-	unsigned long		sr_renewal_time;
 	u32			sr_status_flags;
+	u32			sr_highest_slotid;
+	u32			sr_target_highest_slotid;
 };
 
 struct nfs4_get_lease_time_args {

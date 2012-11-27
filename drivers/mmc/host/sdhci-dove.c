@@ -22,7 +22,6 @@
 #include <linux/err.h>
 #include <linux/io.h>
 #include <linux/clk.h>
-#include <linux/err.h>
 #include <linux/module.h>
 #include <linux/mmc/host.h>
 #include <linux/of.h>

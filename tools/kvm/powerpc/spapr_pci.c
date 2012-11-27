@@ -15,9 +15,9 @@
 
 #include "spapr.h"
 #include "spapr_pci.h"
+#include "kvm/fdt.h"
 #include "kvm/util.h"
 #include "kvm/pci.h"
-#include "libfdt.h"
 
 #include <linux/pci_regs.h>
 #include <linux/byteorder.h>
@@ -302,7 +302,7 @@ int spapr_populate_pci_devices(struct kvm *kvm,
 	/* Populate PCI devices and allocate IRQs */
 	devices = 0;
 
-	for (devid = 0; devid < PCI_MAX_DEVICES; devid++) {
+	for (devid = 0; devid < KVM_MAX_DEVICES; devid++) {
 		uint32_t *irqmap = interrupt_map[devices];
 		struct pci_device_header *hdr = pci__find_dev(devid);
 

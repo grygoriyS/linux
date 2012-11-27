@@ -115,9 +115,7 @@ static DEFINE_PCI_DEVICE_TABLE(qlcnic_pci_tbl) = {
 MODULE_DEVICE_TABLE(pci, qlcnic_pci_tbl);
 
 
-inline void
-qlcnic_update_cmd_producer(struct qlcnic_adapter *adapter,
-		struct qlcnic_host_tx_ring *tx_ring)
+inline void qlcnic_update_cmd_producer(struct qlcnic_host_tx_ring *tx_ring)
 {
 	writel(tx_ring->producer, tx_ring->crb_cmd_producer);
 }
@@ -1485,8 +1483,8 @@ qlcnic_reset_context(struct qlcnic_adapter *adapter)
 }
 
 static int
-qlcnic_setup_netdev(struct qlcnic_adapter *adapter,
-		struct net_device *netdev, u8 pci_using_dac)
+qlcnic_setup_netdev(struct qlcnic_adapter *adapter, struct net_device *netdev,
+		    int pci_using_dac)
 {
 	int err;
 	struct pci_dev *pdev = adapter->pdev;
@@ -1506,7 +1504,7 @@ qlcnic_setup_netdev(struct qlcnic_adapter *adapter,
 
 	if (adapter->capabilities & QLCNIC_FW_CAPABILITY_TSO)
 		netdev->hw_features |= NETIF_F_TSO | NETIF_F_TSO6;
-	if (pci_using_dac)
+	if (pci_using_dac == 1)
 		netdev->hw_features |= NETIF_F_HIGHDMA;
 
 	netdev->vlan_features = netdev->hw_features;
@@ -1530,7 +1528,7 @@ qlcnic_setup_netdev(struct qlcnic_adapter *adapter,
 	return 0;
 }
 
-static int qlcnic_set_dma_mask(struct pci_dev *pdev, u8 *pci_using_dac)
+static int qlcnic_set_dma_mask(struct pci_dev *pdev, int *pci_using_dac)
 {
 	if (!pci_set_dma_mask(pdev, DMA_BIT_MASK(64)) &&
 			!pci_set_consistent_dma_mask(pdev, DMA_BIT_MASK(64)))
@@ -1564,9 +1562,8 @@ qlcnic_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 {
 	struct net_device *netdev = NULL;
 	struct qlcnic_adapter *adapter = NULL;
-	int err;
+	int err, pci_using_dac = -1;
 	uint8_t revision_id;
-	uint8_t pci_using_dac;
 	char brd_name[QLCNIC_MAX_BOARD_NAME_LEN];
 
 	err = pci_enable_device(pdev);
@@ -2033,7 +2030,7 @@ qlcnic_tx_pkt(struct qlcnic_adapter *adapter,
 	if (protocol == ETH_P_8021Q) {
 		vh = (struct vlan_ethhdr *)skb->data;
 		flags = FLAGS_VLAN_TAGGED;
-		vlan_tci = vh->h_vlan_TCI;
+		vlan_tci = ntohs(vh->h_vlan_TCI);
 		protocol = ntohs(vh->h_vlan_encapsulated_proto);
 	} else if (vlan_tx_tag_present(skb)) {
 		flags = FLAGS_VLAN_OOB;
@@ -2337,7 +2334,7 @@ qlcnic_xmit_frame(struct sk_buff *skb, struct net_device *netdev)
 	adapter->stats.txbytes += skb->len;
 	adapter->stats.xmitcalled++;
 
-	qlcnic_update_cmd_producer(adapter, tx_ring);
+	qlcnic_update_cmd_producer(tx_ring);
 
 	return NETDEV_TX_OK;
 
@@ -4523,7 +4520,7 @@ static void
 qlcnic_restore_indev_addr(struct net_device *dev, unsigned long event)
 { }
 #endif
-static const struct pci_error_handlers qlcnic_err_handler = {
+static struct pci_error_handlers qlcnic_err_handler = {
 	.error_detected = qlcnic_io_error_detected,
 	.slot_reset = qlcnic_io_slot_reset,
 	.resume = qlcnic_io_resume,

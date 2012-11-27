@@ -480,6 +480,9 @@ void iwl_trans_pcie_txq_enable(struct iwl_trans *trans, int txq_id, int fifo,
 void iwl_trans_pcie_txq_disable(struct iwl_trans *trans, int txq_id)
 {
 	struct iwl_trans_pcie *trans_pcie = IWL_TRANS_GET_PCIE_TRANS(trans);
+	u32 stts_addr = trans_pcie->scd_base_addr +
+			SCD_TX_STTS_QUEUE_OFFSET(txq_id);
+	static const u32 zero_val[4] = {};
 
 	if (!test_and_clear_bit(txq_id, trans_pcie->queue_used)) {
 		WARN_ONCE(1, "queue %d not used", txq_id);
@@ -487,6 +490,10 @@ void iwl_trans_pcie_txq_disable(struct iwl_trans *trans, int txq_id)
 	}
 
 	iwl_txq_set_inactive(trans, txq_id);
+
+	_iwl_write_targ_mem_dwords(trans, stts_addr,
+				   zero_val, ARRAY_SIZE(zero_val));
+
 	IWL_DEBUG_TX_QUEUES(trans, "Deactivate queue %d\n", txq_id);
 }
 
@@ -541,7 +548,10 @@ static int iwl_enqueue_hcmd(struct iwl_trans *trans, struct iwl_host_cmd *cmd)
 	 * allocated into separate TFDs, then we will need to
 	 * increase the size of the buffers.
 	 */
-	if (WARN_ON(copy_size > TFD_MAX_PAYLOAD_SIZE))
+	if (WARN(copy_size > TFD_MAX_PAYLOAD_SIZE,
+		 "Command %s (%#x) is too large (%d bytes)\n",
+		 trans_pcie_get_cmd_string(trans_pcie, cmd->id),
+		 cmd->id, copy_size))
 		return -EINVAL;
 
 	spin_lock_bh(&txq->lock);

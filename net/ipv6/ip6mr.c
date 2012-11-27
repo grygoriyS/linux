@@ -66,8 +66,8 @@ struct mr6_table {
 	struct mif_device	vif6_table[MAXMIFS];
 	int			maxvif;
 	atomic_t		cache_resolve_queue_len;
-	int			mroute_do_assert;
-	int			mroute_do_pim;
+	bool			mroute_do_assert;
+	bool			mroute_do_pim;
 #ifdef CONFIG_IPV6_PIMSM_V2
 	int			mroute_reg_vif_num;
 #endif
@@ -1583,7 +1583,7 @@ int ip6_mroute_setsockopt(struct sock *sk, int optname, char __user *optval, uns
 		return -ENOENT;
 
 	if (optname != MRT6_INIT) {
-		if (sk != mrt->mroute6_sk && !capable(CAP_NET_ADMIN))
+		if (sk != mrt->mroute6_sk && !ns_capable(net->user_ns, CAP_NET_ADMIN))
 			return -EACCES;
 	}
 
@@ -1648,7 +1648,7 @@ int ip6_mroute_setsockopt(struct sock *sk, int optname, char __user *optval, uns
 		int v;
 		if (get_user(v, (int __user *)optval))
 			return -EFAULT;
-		mrt->mroute_do_assert = !!v;
+		mrt->mroute_do_assert = v;
 		return 0;
 	}
 

@@ -515,7 +515,7 @@ static int sock_bindtodevice(struct sock *sk, char __user *optval, int optlen)
 
 	/* Sorry... */
 	ret = -EPERM;
-	if (!capable(CAP_NET_RAW))
+	if (!ns_capable(net->user_ns, CAP_NET_RAW))
 		goto out;
 
 	ret = -EINVAL;
@@ -696,7 +696,8 @@ set_rcvbuf:
 		break;
 
 	case SO_PRIORITY:
-		if ((val >= 0 && val <= 6) || capable(CAP_NET_ADMIN))
+		if ((val >= 0 && val <= 6) ||
+		    ns_capable(sock_net(sk)->user_ns, CAP_NET_ADMIN))
 			sk->sk_priority = val;
 		else
 			ret = -EPERM;
@@ -813,7 +814,7 @@ set_rcvbuf:
 			clear_bit(SOCK_PASSSEC, &sock->flags);
 		break;
 	case SO_MARK:
-		if (!capable(CAP_NET_ADMIN))
+		if (!ns_capable(sock_net(sk)->user_ns, CAP_NET_ADMIN))
 			ret = -EPERM;
 		else
 			sk->sk_mark = val;
@@ -1074,6 +1075,15 @@ int sock_getsockopt(struct socket *sock, int level, int optname,
 	case SO_NOFCS:
 		v.val = sock_flag(sk, SOCK_NOFCS);
 		break;
+	case SO_BINDTODEVICE:
+		v.val = sk->sk_bound_dev_if;
+		break;
+	case SO_GET_FILTER:
+		len = sk_get_filter(sk, (struct sock_filter __user *)optval, len);
+		if (len < 0)
+			return len;
+
+		goto lenout;
 	default:
 		return -ENOPROTOOPT;
 	}
@@ -1214,13 +1224,11 @@ static void sk_prot_free(struct proto *prot, struct sock *sk)
 
 #ifdef CONFIG_CGROUPS
 #if IS_ENABLED(CONFIG_NET_CLS_CGROUP)
-void sock_update_classid(struct sock *sk)
+void sock_update_classid(struct sock *sk, struct task_struct *task)
 {
 	u32 classid;
 
-	rcu_read_lock();  /* doing current task, which cannot vanish. */
-	classid = task_cls_classid(current);
-	rcu_read_unlock();
+	classid = task_cls_classid(task);
 	if (classid != sk->sk_classid)
 		sk->sk_classid = classid;
 }
@@ -1263,7 +1271,7 @@ struct sock *sk_alloc(struct net *net, int family, gfp_t priority,
 		sock_net_set(sk, get_net(net));
 		atomic_set(&sk->sk_wmem_alloc, 1);
 
-		sock_update_classid(sk);
+		sock_update_classid(sk, current);
 		sock_update_netprioidx(sk, current);
 	}
 

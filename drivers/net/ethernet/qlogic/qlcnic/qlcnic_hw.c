@@ -266,6 +266,33 @@ static const unsigned crb_hub_agt[64] = {
 	0,
 };
 
+static void qlcnic_read_dump_reg(u32 addr, void __iomem *bar0, u32 *data)
+{
+	u32 dest;
+	void __iomem *window_reg;
+
+	dest = addr & 0xFFFF0000;
+	window_reg = bar0 + QLCNIC_FW_DUMP_REG1;
+	writel(dest, window_reg);
+	readl(window_reg);
+	window_reg = bar0 + QLCNIC_FW_DUMP_REG2 + LSW(addr);
+	*data = readl(window_reg);
+}
+
+static void qlcnic_write_dump_reg(u32 addr, void __iomem *bar0, u32 data)
+{
+	u32 dest;
+	void __iomem *window_reg;
+
+	dest = addr & 0xFFFF0000;
+	window_reg = bar0 + QLCNIC_FW_DUMP_REG1;
+	writel(dest, window_reg);
+	readl(window_reg);
+	window_reg = bar0 + QLCNIC_FW_DUMP_REG2 + LSW(addr);
+	writel(data, window_reg);
+	readl(window_reg);
+}
+
 /*  PCI Windowing for DDR regions.  */
 
 #define QLCNIC_PCIE_SEM_TIMEOUT	10000
@@ -350,7 +377,7 @@ qlcnic_send_cmd_descs(struct qlcnic_adapter *adapter,
 
 	tx_ring->producer = producer;
 
-	qlcnic_update_cmd_producer(adapter, tx_ring);
+	qlcnic_update_cmd_producer(tx_ring);
 
 	__netif_tx_unlock_bh(tx_ring->txq);
 
@@ -540,7 +567,7 @@ void qlcnic_delete_lb_filters(struct qlcnic_adapter *adapter)
 	}
 }
 
-int qlcnic_set_fw_loopback(struct qlcnic_adapter *adapter, u8 flag)
+static int qlcnic_set_fw_loopback(struct qlcnic_adapter *adapter, u8 flag)
 {
 	struct qlcnic_nic_req req;
 	int rv;
@@ -1322,9 +1349,8 @@ int qlcnic_config_led(struct qlcnic_adapter *adapter, u32 state, u32 rate)
 }
 
 /* FW dump related functions */
-static u32
-qlcnic_dump_crb(struct qlcnic_adapter *adapter, struct qlcnic_dump_entry *entry,
-		u32 *buffer)
+static u32 qlcnic_dump_crb(struct qlcnic_adapter *adapter,
+			   struct qlcnic_dump_entry *entry, __le32 *buffer)
 {
 	int i;
 	u32 addr, data;
@@ -1334,7 +1360,7 @@ qlcnic_dump_crb(struct qlcnic_adapter *adapter, struct qlcnic_dump_entry *entry,
 	addr = crb->addr;
 
 	for (i = 0; i < crb->no_ops; i++) {
-		QLCNIC_RD_DUMP_REG(addr, base, &data);
+		qlcnic_read_dump_reg(addr, base, &data);
 		*buffer++ = cpu_to_le32(addr);
 		*buffer++ = cpu_to_le32(data);
 		addr += crb->stride;
@@ -1342,9 +1368,8 @@ qlcnic_dump_crb(struct qlcnic_adapter *adapter, struct qlcnic_dump_entry *entry,
 	return crb->no_ops * 2 * sizeof(u32);
 }
 
-static u32
-qlcnic_dump_ctrl(struct qlcnic_adapter *adapter,
-	struct qlcnic_dump_entry *entry, u32 *buffer)
+static u32 qlcnic_dump_ctrl(struct qlcnic_adapter *adapter,
+			    struct qlcnic_dump_entry *entry, __le32 *buffer)
 {
 	int i, k, timeout = 0;
 	void __iomem *base = adapter->ahw->pci_base0;
@@ -1364,25 +1389,25 @@ qlcnic_dump_ctrl(struct qlcnic_adapter *adapter,
 				continue;
 			switch (1 << k) {
 			case QLCNIC_DUMP_WCRB:
-				QLCNIC_WR_DUMP_REG(addr, base, ctr->val1);
+				qlcnic_write_dump_reg(addr, base, ctr->val1);
 				break;
 			case QLCNIC_DUMP_RWCRB:
-				QLCNIC_RD_DUMP_REG(addr, base, &data);
-				QLCNIC_WR_DUMP_REG(addr, base, data);
+				qlcnic_read_dump_reg(addr, base, &data);
+				qlcnic_write_dump_reg(addr, base, data);
 				break;
 			case QLCNIC_DUMP_ANDCRB:
-				QLCNIC_RD_DUMP_REG(addr, base, &data);
-				QLCNIC_WR_DUMP_REG(addr, base,
-					(data & ctr->val2));
+				qlcnic_read_dump_reg(addr, base, &data);
+				qlcnic_write_dump_reg(addr, base,
+						      data & ctr->val2);
 				break;
 			case QLCNIC_DUMP_ORCRB:
-				QLCNIC_RD_DUMP_REG(addr, base, &data);
-				QLCNIC_WR_DUMP_REG(addr, base,
-					(data | ctr->val3));
+				qlcnic_read_dump_reg(addr, base, &data);
+				qlcnic_write_dump_reg(addr, base,
+						      data | ctr->val3);
 				break;
 			case QLCNIC_DUMP_POLLCRB:
 				while (timeout <= ctr->timeout) {
-					QLCNIC_RD_DUMP_REG(addr, base, &data);
+					qlcnic_read_dump_reg(addr, base, &data);
 					if ((data & ctr->val2) == ctr->val1)
 						break;
 					msleep(1);
@@ -1397,7 +1422,7 @@ qlcnic_dump_ctrl(struct qlcnic_adapter *adapter,
 			case QLCNIC_DUMP_RD_SAVE:
 				if (ctr->index_a)
 					addr = t_hdr->saved_state[ctr->index_a];
-				QLCNIC_RD_DUMP_REG(addr, base, &data);
+				qlcnic_read_dump_reg(addr, base, &data);
 				t_hdr->saved_state[ctr->index_v] = data;
 				break;
 			case QLCNIC_DUMP_WRT_SAVED:
@@ -1407,7 +1432,7 @@ qlcnic_dump_ctrl(struct qlcnic_adapter *adapter,
 					data = ctr->val1;
 				if (ctr->index_a)
 					addr = t_hdr->saved_state[ctr->index_a];
-				QLCNIC_WR_DUMP_REG(addr, base, data);
+				qlcnic_write_dump_reg(addr, base, data);
 				break;
 			case QLCNIC_DUMP_MOD_SAVE_ST:
 				data = t_hdr->saved_state[ctr->index_v];
@@ -1430,9 +1455,8 @@ qlcnic_dump_ctrl(struct qlcnic_adapter *adapter,
 	return 0;
 }
 
-static u32
-qlcnic_dump_mux(struct qlcnic_adapter *adapter, struct qlcnic_dump_entry *entry,
-	u32 *buffer)
+static u32 qlcnic_dump_mux(struct qlcnic_adapter *adapter,
+			   struct qlcnic_dump_entry *entry, __le32 *buffer)
 {
 	int loop;
 	u32 val, data = 0;
@@ -1441,8 +1465,8 @@ qlcnic_dump_mux(struct qlcnic_adapter *adapter, struct qlcnic_dump_entry *entry,
 
 	val = mux->val;
 	for (loop = 0; loop < mux->no_ops; loop++) {
-		QLCNIC_WR_DUMP_REG(mux->addr, base, val);
-		QLCNIC_RD_DUMP_REG(mux->read_addr, base, &data);
+		qlcnic_write_dump_reg(mux->addr, base, val);
+		qlcnic_read_dump_reg(mux->read_addr, base, &data);
 		*buffer++ = cpu_to_le32(val);
 		*buffer++ = cpu_to_le32(data);
 		val += mux->val_stride;
@@ -1450,9 +1474,8 @@ qlcnic_dump_mux(struct qlcnic_adapter *adapter, struct qlcnic_dump_entry *entry,
 	return 2 * mux->no_ops * sizeof(u32);
 }
 
-static u32
-qlcnic_dump_que(struct qlcnic_adapter *adapter, struct qlcnic_dump_entry *entry,
-	u32 *buffer)
+static u32 qlcnic_dump_que(struct qlcnic_adapter *adapter,
+			   struct qlcnic_dump_entry *entry, __le32 *buffer)
 {
 	int i, loop;
 	u32 cnt, addr, data, que_id = 0;
@@ -1463,10 +1486,10 @@ qlcnic_dump_que(struct qlcnic_adapter *adapter, struct qlcnic_dump_entry *entry,
 	cnt = que->read_addr_cnt;
 
 	for (loop = 0; loop < que->no_ops; loop++) {
-		QLCNIC_WR_DUMP_REG(que->sel_addr, base, que_id);
+		qlcnic_write_dump_reg(que->sel_addr, base, que_id);
 		addr = que->read_addr;
 		for (i = 0; i < cnt; i++) {
-			QLCNIC_RD_DUMP_REG(addr, base, &data);
+			qlcnic_read_dump_reg(addr, base, &data);
 			*buffer++ = cpu_to_le32(data);
 			addr += que->read_addr_stride;
 		}
@@ -1475,9 +1498,8 @@ qlcnic_dump_que(struct qlcnic_adapter *adapter, struct qlcnic_dump_entry *entry,
 	return que->no_ops * cnt * sizeof(u32);
 }
 
-static u32
-qlcnic_dump_ocm(struct qlcnic_adapter *adapter, struct qlcnic_dump_entry *entry,
-	u32 *buffer)
+static u32 qlcnic_dump_ocm(struct qlcnic_adapter *adapter,
+			   struct qlcnic_dump_entry *entry, __le32 *buffer)
 {
 	int i;
 	u32 data;
@@ -1493,9 +1515,8 @@ qlcnic_dump_ocm(struct qlcnic_adapter *adapter, struct qlcnic_dump_entry *entry,
 	return ocm->no_ops * sizeof(u32);
 }
 
-static u32
-qlcnic_read_rom(struct qlcnic_adapter *adapter, struct qlcnic_dump_entry *entry,
-	u32 *buffer)
+static u32 qlcnic_read_rom(struct qlcnic_adapter *adapter,
+			   struct qlcnic_dump_entry *entry, __le32 *buffer)
 {
 	int i, count = 0;
 	u32 fl_addr, size, val, lck_val, addr;
@@ -1514,9 +1535,9 @@ lock_try:
 	writel(adapter->ahw->pci_func, (base + QLCNIC_FLASH_LOCK_ID));
 	for (i = 0; i < size; i++) {
 		addr = fl_addr & 0xFFFF0000;
-		QLCNIC_WR_DUMP_REG(FLASH_ROM_WINDOW, base, addr);
+		qlcnic_write_dump_reg(FLASH_ROM_WINDOW, base, addr);
 		addr = LSW(fl_addr) + FLASH_ROM_DATA;
-		QLCNIC_RD_DUMP_REG(addr, base, &val);
+		qlcnic_read_dump_reg(addr, base, &val);
 		fl_addr += 4;
 		*buffer++ = cpu_to_le32(val);
 	}
@@ -1524,9 +1545,8 @@ lock_try:
 	return rom->size;
 }
 
-static u32
-qlcnic_dump_l1_cache(struct qlcnic_adapter *adapter,
-	struct qlcnic_dump_entry *entry, u32 *buffer)
+static u32 qlcnic_dump_l1_cache(struct qlcnic_adapter *adapter,
+				struct qlcnic_dump_entry *entry, __le32 *buffer)
 {
 	int i;
 	u32 cnt, val, data, addr;
@@ -1536,12 +1556,12 @@ qlcnic_dump_l1_cache(struct qlcnic_adapter *adapter,
 	val = l1->init_tag_val;
 
 	for (i = 0; i < l1->no_ops; i++) {
-		QLCNIC_WR_DUMP_REG(l1->addr, base, val);
-		QLCNIC_WR_DUMP_REG(l1->ctrl_addr, base, LSW(l1->ctrl_val));
+		qlcnic_write_dump_reg(l1->addr, base, val);
+		qlcnic_write_dump_reg(l1->ctrl_addr, base, LSW(l1->ctrl_val));
 		addr = l1->read_addr;
 		cnt = l1->read_addr_num;
 		while (cnt) {
-			QLCNIC_RD_DUMP_REG(addr, base, &data);
+			qlcnic_read_dump_reg(addr, base, &data);
 			*buffer++ = cpu_to_le32(data);
 			addr += l1->read_addr_stride;
 			cnt--;
@@ -1551,9 +1571,8 @@ qlcnic_dump_l1_cache(struct qlcnic_adapter *adapter,
 	return l1->no_ops * l1->read_addr_num * sizeof(u32);
 }
 
-static u32
-qlcnic_dump_l2_cache(struct qlcnic_adapter *adapter,
-	struct qlcnic_dump_entry *entry, u32 *buffer)
+static u32 qlcnic_dump_l2_cache(struct qlcnic_adapter *adapter,
+				struct qlcnic_dump_entry *entry, __le32 *buffer)
 {
 	int i;
 	u32 cnt, val, data, addr;
@@ -1566,14 +1585,14 @@ qlcnic_dump_l2_cache(struct qlcnic_adapter *adapter,
 	poll_to = MSB(MSW(l2->ctrl_val));
 
 	for (i = 0; i < l2->no_ops; i++) {
-		QLCNIC_WR_DUMP_REG(l2->addr, base, val);
+		qlcnic_write_dump_reg(l2->addr, base, val);
 		if (LSW(l2->ctrl_val))
-			QLCNIC_WR_DUMP_REG(l2->ctrl_addr, base,
-				LSW(l2->ctrl_val));
+			qlcnic_write_dump_reg(l2->ctrl_addr, base,
+					      LSW(l2->ctrl_val));
 		if (!poll_mask)
 			goto skip_poll;
 		do {
-			QLCNIC_RD_DUMP_REG(l2->ctrl_addr, base, &data);
+			qlcnic_read_dump_reg(l2->ctrl_addr, base, &data);
 			if (!(data & poll_mask))
 				break;
 			msleep(1);
@@ -1590,7 +1609,7 @@ skip_poll:
 		addr = l2->read_addr;
 		cnt = l2->read_addr_num;
 		while (cnt) {
-			QLCNIC_RD_DUMP_REG(addr, base, &data);
+			qlcnic_read_dump_reg(addr, base, &data);
 			*buffer++ = cpu_to_le32(data);
 			addr += l2->read_addr_stride;
 			cnt--;
@@ -1600,9 +1619,8 @@ skip_poll:
 	return l2->no_ops * l2->read_addr_num * sizeof(u32);
 }
 
-static u32
-qlcnic_read_memory(struct qlcnic_adapter *adapter,
-	struct qlcnic_dump_entry *entry, u32 *buffer)
+static u32 qlcnic_read_memory(struct qlcnic_adapter *adapter,
+			      struct qlcnic_dump_entry *entry, __le32 *buffer)
 {
 	u32 addr, data, test, ret = 0;
 	int i, reg_read;
@@ -1622,13 +1640,13 @@ qlcnic_read_memory(struct qlcnic_adapter *adapter,
 	mutex_lock(&adapter->ahw->mem_lock);
 
 	while (reg_read != 0) {
-		QLCNIC_WR_DUMP_REG(MIU_TEST_ADDR_LO, base, addr);
-		QLCNIC_WR_DUMP_REG(MIU_TEST_ADDR_HI, base, 0);
-		QLCNIC_WR_DUMP_REG(MIU_TEST_CTR, base,
-			TA_CTL_ENABLE | TA_CTL_START);
+		qlcnic_write_dump_reg(MIU_TEST_ADDR_LO, base, addr);
+		qlcnic_write_dump_reg(MIU_TEST_ADDR_HI, base, 0);
+		qlcnic_write_dump_reg(MIU_TEST_CTR, base,
+				      TA_CTL_ENABLE | TA_CTL_START);
 
 		for (i = 0; i < MAX_CTL_CHECK; i++) {
-			QLCNIC_RD_DUMP_REG(MIU_TEST_CTR, base, &test);
+			qlcnic_read_dump_reg(MIU_TEST_CTR, base, &test);
 			if (!(test & TA_CTL_BUSY))
 				break;
 		}
@@ -1641,7 +1659,8 @@ qlcnic_read_memory(struct qlcnic_adapter *adapter,
 			}
 		}
 		for (i = 0; i < 4; i++) {
-			QLCNIC_RD_DUMP_REG(MIU_TEST_READ_DATA[i], base, &data);
+			qlcnic_read_dump_reg(MIU_TEST_READ_DATA[i], base,
+					     &data);
 			*buffer++ = cpu_to_le32(data);
 		}
 		addr += 16;
@@ -1653,15 +1672,14 @@ out:
 	return mem->size;
 }
 
-static u32
-qlcnic_dump_nop(struct qlcnic_adapter *adapter,
-	struct qlcnic_dump_entry *entry, u32 *buffer)
+static u32 qlcnic_dump_nop(struct qlcnic_adapter *adapter,
+			   struct qlcnic_dump_entry *entry, __le32 *buffer)
 {
 	entry->hdr.flags |= QLCNIC_DUMP_SKIP;
 	return 0;
 }
 
-struct qlcnic_dump_operations fw_dump_ops[] = {
+static const struct qlcnic_dump_operations fw_dump_ops[] = {
 	{ QLCNIC_DUMP_NOP, qlcnic_dump_nop },
 	{ QLCNIC_DUMP_READ_CRB, qlcnic_dump_crb },
 	{ QLCNIC_DUMP_READ_MUX, qlcnic_dump_mux },
@@ -1702,7 +1720,7 @@ qlcnic_valid_dump_entry(struct device *dev, struct qlcnic_dump_entry *entry,
 
 int qlcnic_dump_fw(struct qlcnic_adapter *adapter)
 {
-	u32 *buffer;
+	__le32 *buffer;
 	char mesg[64];
 	char *msg[] = {mesg, NULL};
 	int i, k, ops_cnt, ops_index, dump_size = 0;

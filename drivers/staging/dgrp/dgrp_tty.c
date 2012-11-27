@@ -432,7 +432,7 @@ static void drp_param(struct ch_struct *ch)
 	/*
 	 * From the POSIX.1 spec (7.1.2.6): "If {_POSIX_VDISABLE}
 	 * is defined for the terminal device file, and the value
-	 * of one of the changable special control characters (see
+	 * of one of the changeable special control characters (see
 	 * 7.1.1.9) is {_POSIX_VDISABLE}, that function shall be
 	 * disabled, that is, no input data shall be recognized as
 	 * the disabled special character."
@@ -2699,7 +2699,7 @@ static int dgrp_tty_ioctl(struct tty_struct *tty, unsigned int cmd,
 	- looking at the tty_ioctl code, these command all call our
 	tty_set_termios at the driver's end, when a TCSETA* is sent,
 	it is expecting the tty to have a termio structure,
-	NOT a termios stucture.  These two structures differ in size
+	NOT a termios structure.  These two structures differ in size
 	and the tty_ioctl code does a conversion before processing them both.
 	- we should treat the TCSETAW TCSETAF ioctls the same, and let
 	the tty_ioctl code do the conversion stuff.
@@ -2996,7 +2996,7 @@ static void dgrp_tty_start(struct tty_struct *tty)
 }
 
 /*
- *	Stop the reciever
+ *	Stop the receiver
  */
 static void dgrp_tty_input_stop(struct tty_struct *tty)
 {
@@ -3119,6 +3119,7 @@ static void dgrp_tty_hangup(struct tty_struct *tty)
 void
 dgrp_tty_uninit(struct nd_struct *nd)
 {
+	unsigned int i;
 	char id[3];
 
 	ID_TO_CHAR(nd->nd_ID, id);
@@ -3152,6 +3153,8 @@ dgrp_tty_uninit(struct nd_struct *nd)
 		put_tty_driver(nd->nd_xprint_ttdriver);
 		nd->nd_ttdriver_flags &= ~XPRINT_TTDRV_REG;
 	}
+	for (i = 0; i < CHAN_MAX; i++)
+		tty_port_destroy(&nd->nd_chan[i].port);
 }
 
 
@@ -3334,7 +3337,6 @@ dgrp_tty_init(struct nd_struct *nd)
 
 		init_waitqueue_head(&(ch->ch_pun.un_open_wait));
 		init_waitqueue_head(&(ch->ch_pun.un_close_wait));
-		tty_port_init(&ch->port);
 		tty_port_init(&ch->port);
 	}
 	return 0;

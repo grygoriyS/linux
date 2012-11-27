@@ -1,4 +1,3 @@
-
 /******************************************************************************
  *
  * Module Name: hwacpi - ACPI Hardware Initialization/Mode Interface
@@ -109,8 +108,7 @@ acpi_status acpi_hw_set_mode(u32 mode)
 		 * enable bits to default
 		 */
 		status = acpi_hw_write_port(acpi_gbl_FADT.smi_command,
-					    (u32) acpi_gbl_FADT.acpi_disable,
-					    8);
+					    (u32)acpi_gbl_FADT.acpi_disable, 8);
 		ACPI_DEBUG_PRINT((ACPI_DB_INFO,
 				  "Attempting to enable Legacy (non-ACPI) mode\n"));
 		break;
@@ -136,7 +134,7 @@ acpi_status acpi_hw_set_mode(u32 mode)
  *
  * RETURN:      SYS_MODE_ACPI or SYS_MODE_LEGACY
  *
- * DESCRIPTION: Return current operating state of system.  Determined by
+ * DESCRIPTION: Return current operating state of system. Determined by
  *              querying the SCI_EN bit.
  *
  ******************************************************************************/

@@ -1,0 +1,29 @@
+SPEAr cpufreq driver
+-------------------
+
+SPEAr SoC cpufreq driver for CPU frequency scaling.
+It supports both uniprocessor (UP) and symmetric multiprocessor (SMP) systems
+which share clock across all CPUs.
+
+Required properties:
+- compatible: "st,cpufreq-spear"
+- cpufreq_tbl: Table of frequencies CPU could be transitioned into, in the
+  increasing order.
+
+Optional properties:
+- clock-latency: Specify the possible maximum transition latency for clock, in
+  unit of nanoseconds.
+
+Examples:
+--------
+
+cpufreq {
+	compatible = "st,cpufreq-spear";
+	cpufreq_tbl = < 166000
+			200000
+			250000
+			300000
+			400000
+			500000
+			600000 >;
+};

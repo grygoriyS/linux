@@ -1,7 +1,6 @@
 /******************************************************************************
  *
  * Name: acpredef - Information table for ACPI predefined methods and objects
- *              $Revision: 1.1 $
  *
  *****************************************************************************/
 
@@ -51,13 +50,13 @@
  *
  * 1) PTYPE1 packages do not contain sub-packages.
  *
- * ACPI_PTYPE1_FIXED: Fixed length, 1 or 2 object types:
+ * ACPI_PTYPE1_FIXED: Fixed-length length, 1 or 2 object types:
  *      object type
  *      count
  *      object type
  *      count
  *
- * ACPI_PTYPE1_VAR: Variable length:
+ * ACPI_PTYPE1_VAR: Variable-length length:
  *      object type (Int/Buf/Ref)
  *
  * ACPI_PTYPE1_OPTION: Package has some required and some optional elements
@@ -85,10 +84,10 @@
  *      count
  *      (Used for _CST)
  *
- * ACPI_PTYPE2_FIXED: Each subpackage is of fixed length
+ * ACPI_PTYPE2_FIXED: Each subpackage is of Fixed-length
  *      (Used for _PRT)
  *
- * ACPI_PTYPE2_MIN: Each subpackage has a variable but minimum length
+ * ACPI_PTYPE2_MIN: Each subpackage has a Variable-length but minimum length
  *      (Used for _HPX)
  *
  * ACPI_PTYPE2_REV_FIXED: Revision at start, each subpackage is Fixed-length
@@ -124,7 +123,8 @@ enum acpi_return_package_types {
  * These are the names that can actually be evaluated via acpi_evaluate_object.
  * Not present in this table are the following:
  *
- *      1) Predefined/Reserved names that are never evaluated via acpi_evaluate_object:
+ *      1) Predefined/Reserved names that are never evaluated via
+ *         acpi_evaluate_object:
  *          _Lxx and _Exx GPE methods
  *          _Qxx EC methods
  *          _T_x compiler temporary variables
@@ -149,9 +149,10 @@ enum acpi_return_package_types {
  * information about the expected structure of the package. This information
  * is saved here (rather than in a separate table) in order to minimize the
  * overall size of the stored data.
+ *
+ * Note: The additional braces are intended to promote portability.
  */
-static const union acpi_predefined_info predefined_names[] =
-{
+static const union acpi_predefined_info predefined_names[] = {
 	{{"_AC0", 0, ACPI_RTYPE_INTEGER}},
 	{{"_AC1", 0, ACPI_RTYPE_INTEGER}},
 	{{"_AC2", 0, ACPI_RTYPE_INTEGER}},
@@ -538,7 +539,8 @@ static const union acpi_predefined_info predefined_names[] =
 
 	/* Acpi 1.0 defined _WAK with no return value. Later, it was changed to return a package */
 
-	{{"_WAK", 1, ACPI_RTYPE_NONE | ACPI_RTYPE_INTEGER | ACPI_RTYPE_PACKAGE}},
+	{{"_WAK", 1,
+          ACPI_RTYPE_NONE | ACPI_RTYPE_INTEGER | ACPI_RTYPE_PACKAGE}},
 			  {{{ACPI_PTYPE1_FIXED, ACPI_RTYPE_INTEGER, 2,0}, 0,0}}, /* Fixed-length (2 Int), but is optional */
 
 	/* _WDG/_WED are MS extensions defined by "Windows Instrumentation" */
@@ -551,11 +553,12 @@ static const union acpi_predefined_info predefined_names[] =
 };
 
 #if 0
+
 	/* This is an internally implemented control method, no need to check */
-	{{"_OSI", 1, ACPI_RTYPE_INTEGER}},
+{ {
+"_OSI", 1, ACPI_RTYPE_INTEGER}},
 
 	/* TBD: */
-
 	_PRT - currently ignore reversed entries. attempt to fix here?
 	think about possibly fixing package elements like _BIF, etc.
 #endif

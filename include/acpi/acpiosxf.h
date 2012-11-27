@@ -1,7 +1,6 @@
-
 /******************************************************************************
  *
- * Name: acpiosxf.h - All interfaces to the OS Services Layer (OSL).  These
+ * Name: acpiosxf.h - All interfaces to the OS Services Layer (OSL). These
  *                    interfaces must be implemented by OSL to interface the
  *                    ACPI components to the host operating system.
  *
@@ -103,10 +102,8 @@ acpi_os_physical_table_override(struct acpi_table_header *existing_table,
 /*
  * Spinlock primitives
  */
-
 #ifndef acpi_os_create_lock
-acpi_status
-acpi_os_create_lock(acpi_spinlock *out_handle);
+acpi_status acpi_os_create_lock(acpi_spinlock * out_handle);
 #endif
 
 void acpi_os_delete_lock(acpi_spinlock handle);
@@ -181,12 +178,13 @@ acpi_status acpi_os_release_object(acpi_cache_t * cache, void *object);
  * Interrupt handlers
  */
 acpi_status
-acpi_os_install_interrupt_handler(u32 gsi,
+acpi_os_install_interrupt_handler(u32 interrupt_number,
 				  acpi_osd_handler service_routine,
 				  void *context);
 
 acpi_status
-acpi_os_remove_interrupt_handler(u32 gsi, acpi_osd_handler service_routine);
+acpi_os_remove_interrupt_handler(u32 interrupt_number,
+				 acpi_osd_handler service_routine);
 
 void acpi_os_gpe_count(u32 gpe_number);
 void acpi_os_fixed_event_count(u32 fixed_event_number);

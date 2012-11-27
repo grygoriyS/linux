@@ -46,7 +46,6 @@
 #include "accommon.h"
 #include "acnamesp.h"
 #include "amlcode.h"
-#include "actables.h"
 
 #define _COMPONENT          ACPI_NAMESPACE
 ACPI_MODULE_NAME("nsutils")
@@ -112,7 +111,7 @@ acpi_ns_print_node_pathname(struct acpi_namespace_node *node,
 u8 acpi_ns_valid_root_prefix(char prefix)
 {
 
-	return ((u8) (prefix == '\\'));
+	return ((u8)(prefix == '\\'));
 }
 
 /*******************************************************************************
@@ -130,7 +129,7 @@ u8 acpi_ns_valid_root_prefix(char prefix)
 static u8 acpi_ns_valid_path_separator(char sep)
 {
 
-	return ((u8) (sep == '.'));
+	return ((u8)(sep == '.'));
 }
 
 /*******************************************************************************
@@ -530,7 +529,7 @@ acpi_ns_externalize_name(u32 internal_name_length,
 	    ((num_segments > 0) ? (num_segments - 1) : 0) + 1;
 
 	/*
-	 * Check to see if we're still in bounds.  If not, there's a problem
+	 * Check to see if we're still in bounds. If not, there's a problem
 	 * with internal_name (invalid format).
 	 */
 	if (required_length > internal_name_length) {
@@ -557,10 +556,14 @@ acpi_ns_externalize_name(u32 internal_name_length,
 				(*converted_name)[j++] = '.';
 			}
 
-			(*converted_name)[j++] = internal_name[names_index++];
-			(*converted_name)[j++] = internal_name[names_index++];
-			(*converted_name)[j++] = internal_name[names_index++];
-			(*converted_name)[j++] = internal_name[names_index++];
+			/* Copy and validate the 4-char name segment */
+
+			ACPI_MOVE_NAME(&(*converted_name)[j],
+				       &internal_name[names_index]);
+			acpi_ut_repair_name(&(*converted_name)[j]);
+
+			j += ACPI_NAME_SIZE;
+			names_index += ACPI_NAME_SIZE;
 		}
 	}
 
@@ -660,17 +663,17 @@ void acpi_ns_terminate(void)
 
 u32 acpi_ns_opens_scope(acpi_object_type type)
 {
-	ACPI_FUNCTION_TRACE_STR(ns_opens_scope, acpi_ut_get_type_name(type));
+	ACPI_FUNCTION_ENTRY();
 
-	if (!acpi_ut_valid_object_type(type)) {
+	if (type > ACPI_TYPE_LOCAL_MAX) {
 
 		/* type code out of range  */
 
 		ACPI_WARNING((AE_INFO, "Invalid Object Type 0x%X", type));
-		return_UINT32(ACPI_NS_NORMAL);
+		return (ACPI_NS_NORMAL);
 	}
 
-	return_UINT32(((u32) acpi_gbl_ns_properties[type]) & ACPI_NS_NEWSCOPE);
+	return (((u32)acpi_gbl_ns_properties[type]) & ACPI_NS_NEWSCOPE);
 }
 
 /*******************************************************************************
@@ -681,7 +684,7 @@ u32 acpi_ns_opens_scope(acpi_object_type type)
  *                            \ (backslash) and ^ (carat) prefixes, and the
  *                            . (period) to separate segments are supported.
  *              prefix_node  - Root of subtree to be searched, or NS_ALL for the
- *                            root of the name space.  If Name is fully
+ *                            root of the name space. If Name is fully
  *                            qualified (first s8 is '\'), the passed value
  *                            of Scope will not be accessed.
  *              flags       - Used to indicate whether to perform upsearch or
@@ -689,7 +692,7 @@ u32 acpi_ns_opens_scope(acpi_object_type type)
  *              return_node - Where the Node is returned
  *
  * DESCRIPTION: Look up a name relative to a given scope and return the
- *              corresponding Node.  NOTE: Scope can be null.
+ *              corresponding Node. NOTE: Scope can be null.
  *
  * MUTEX:       Locks namespace
  *

@@ -138,7 +138,7 @@
 
 /* Maximum sleep allowed via Sleep() operator */
 
-#define ACPI_MAX_SLEEP                  2000	/* Two seconds */
+#define ACPI_MAX_SLEEP                  2000	/* 2000 millisec == two seconds */
 
 /* Address Range lists are per-space_id (Memory and I/O only) */
 
@@ -241,6 +241,7 @@
  *****************************************************************************/
 
 #define ACPI_DEBUGGER_MAX_ARGS          8	/* Must be max method args + 1 */
+#define ACPI_DB_LINE_BUFFER_SIZE	512
 
 #define ACPI_DEBUGGER_COMMAND_PROMPT    '-'
 #define ACPI_DEBUGGER_EXECUTE_PROMPT    '%'

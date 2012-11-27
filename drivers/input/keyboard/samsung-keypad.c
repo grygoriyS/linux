@@ -366,7 +366,7 @@ static void samsung_keypad_dt_gpio_free(struct samsung_keypad *keypad)
 }
 #endif
 
-static int __devinit samsung_keypad_probe(struct platform_device *pdev)
+static int samsung_keypad_probe(struct platform_device *pdev)
 {
 	const struct samsung_keypad_platdata *pdata;
 	const struct matrix_keymap_data *keymap_data;
@@ -523,7 +523,7 @@ err_free_mem:
 	return error;
 }
 
-static int __devexit samsung_keypad_remove(struct platform_device *pdev)
+static int samsung_keypad_remove(struct platform_device *pdev)
 {
 	struct samsung_keypad *keypad = platform_get_drvdata(pdev);
 
@@ -685,7 +685,7 @@ MODULE_DEVICE_TABLE(platform, samsung_keypad_driver_ids);
 
 static struct platform_driver samsung_keypad_driver = {
 	.probe		= samsung_keypad_probe,
-	.remove		= __devexit_p(samsung_keypad_remove),
+	.remove		= samsung_keypad_remove,
 	.driver		= {
 		.name	= "samsung-keypad",
 		.owner	= THIS_MODULE,

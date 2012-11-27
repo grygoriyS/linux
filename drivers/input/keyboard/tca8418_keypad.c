@@ -241,7 +241,7 @@ exit:
 /*
  * Configure the TCA8418 for keypad operation
  */
-static int __devinit tca8418_configure(struct tca8418_keypad *keypad_data)
+static int tca8418_configure(struct tca8418_keypad *keypad_data)
 {
 	int reg, error;
 
@@ -270,7 +270,7 @@ static int __devinit tca8418_configure(struct tca8418_keypad *keypad_data)
 	return error;
 }
 
-static int __devinit tca8418_keypad_probe(struct i2c_client *client,
+static int tca8418_keypad_probe(struct i2c_client *client,
 					  const struct i2c_device_id *id)
 {
 	const struct tca8418_keypad_platform_data *pdata =
@@ -388,7 +388,7 @@ fail1:
 	return error;
 }
 
-static int __devexit tca8418_keypad_remove(struct i2c_client *client)
+static int tca8418_keypad_remove(struct i2c_client *client)
 {
 	struct tca8418_keypad *keypad_data = i2c_get_clientdata(client);
 
@@ -408,7 +408,7 @@ static struct i2c_driver tca8418_keypad_driver = {
 		.owner	= THIS_MODULE,
 	},
 	.probe		= tca8418_keypad_probe,
-	.remove		= __devexit_p(tca8418_keypad_remove),
+	.remove		= tca8418_keypad_remove,
 	.id_table	= tca8418_id,
 };
 

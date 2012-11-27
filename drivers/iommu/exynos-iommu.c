@@ -25,6 +25,8 @@
 #include <linux/list.h>
 #include <linux/memblock.h>
 #include <linux/export.h>
+#include <linux/of_platform.h>
+#include <linux/of.h>
 
 #include <asm/cacheflush.h>
 #include <asm/pgtable.h>
@@ -576,6 +578,7 @@ static int exynos_sysmmu_probe(struct platform_device *pdev)
 	int i, ret;
 	struct device *dev;
 	struct sysmmu_drvdata *data;
+	struct sysmmu_platform_data *platdata;
 
 	dev = &pdev->dev;
 
@@ -634,9 +637,21 @@ static int exynos_sysmmu_probe(struct platform_device *pdev)
 		}
 	}
 
+	if(dev->of_node) {
+		platdata = devm_kzalloc(dev, sizeof(*platdata), GFP_KERNEL);
+		if (!platdata) {
+			dev_dbg(dev, "memory allocation for pdata failed\n");
+			goto err_irq;
+		}
+
+		platdata->clockname = SYSMMU_CLOCK_NAME;
+		platdata->dbgname = (char *)dev->of_node->name;
+		dev->platform_data = platdata;
+	}
+
 	if (dev_get_platdata(dev)) {
 		char *deli, *beg;
-		struct sysmmu_platform_data *platdata = dev_get_platdata(dev);
+		platdata = dev_get_platdata(dev);
 
 		beg = platdata->clockname;
 
@@ -670,8 +685,7 @@ static int exynos_sysmmu_probe(struct platform_device *pdev)
 
 	__set_fault_handler(data, &default_fault_handler);
 
-	if (dev->parent)
-		pm_runtime_enable(dev);
+	pm_runtime_enable(dev);
 
 	dev_dbg(dev, "(%s) Initialized\n", data->dbgname);
 	return 0;
@@ -693,11 +707,20 @@ err_alloc:
 	return ret;
 }
 
+static struct of_device_id iommu_match_types[] = {
+	{
+		.compatible = "samsung,exynos5-sysmmu",
+	}, {
+		/* end node */
+	}
+};
+
 static struct platform_driver exynos_sysmmu_driver = {
 	.probe		= exynos_sysmmu_probe,
 	.driver		= {
 		.owner		= THIS_MODULE,
 		.name		= "exynos-sysmmu",
+		.of_match_table = iommu_match_types,
 	}
 };
 

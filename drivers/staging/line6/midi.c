@@ -59,9 +59,6 @@ static void line6_midi_transmit(struct snd_rawmidi_substream *substream)
 		if (done == 0)
 			break;
 
-#ifdef CONFIG_LINE6_USB_DUMP_MIDI
-		line6_write_hexdump(line6, 's', chunk, done);
-#endif
 		line6_midibuf_write(mb, chunk, done);
 		snd_rawmidi_transmit_ack(substream, done);
 	}
@@ -131,9 +128,6 @@ static int send_midi_async(struct usb_line6 *line6, unsigned char *data,
 		dev_err(line6->ifcdev, "Out of memory\n");
 		return -ENOMEM;
 	}
-#ifdef CONFIG_LINE6_USB_DUMP_CTRL
-	line6_write_hexdump(line6, 'S', data, length);
-#endif
 
 	transfer_buffer = kmemdup(data, length, GFP_ATOMIC);
 

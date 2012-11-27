@@ -158,7 +158,9 @@ struct kvm_stats_debugfs_item debugfs_entries[] = {
 
 u64 __read_mostly host_xcr0;
 
-int emulator_fix_hypercall(struct x86_emulate_ctxt *ctxt);
+static int emulator_fix_hypercall(struct x86_emulate_ctxt *ctxt);
+
+static int kvm_vcpu_reset(struct kvm_vcpu *vcpu);
 
 static inline void kvm_async_pf_hash_reset(struct kvm_vcpu *vcpu)
 {
@@ -633,7 +635,7 @@ int kvm_set_cr3(struct kvm_vcpu *vcpu, unsigned long cr3)
 	}
 
 	if (is_long_mode(vcpu)) {
-		if (kvm_read_cr4(vcpu) & X86_CR4_PCIDE) {
+		if (kvm_read_cr4_bits(vcpu, X86_CR4_PCIDE)) {
 			if (cr3 & CR3_PCID_ENABLED_RESERVED_BITS)
 				return 1;
 		} else
@@ -2687,19 +2689,13 @@ long kvm_arch_vcpu_ioctl(struct file *filp,
 		break;
 	}
 	case KVM_SET_LAPIC: {
-		r = -EINVAL;
 		if (!vcpu->arch.apic)
 			goto out;
 		u.lapic = memdup_user(argp, sizeof(*u.lapic));
-		if (IS_ERR(u.lapic)) {
-			r = PTR_ERR(u.lapic);
-			goto out;
-		}
+		if (IS_ERR(u.lapic))
+			return PTR_ERR(u.lapic);
 
 		r = kvm_vcpu_ioctl_set_lapic(vcpu, u.lapic);
-		if (r)
-			goto out;
-		r = 0;
 		break;
 	}
 	case KVM_INTERRUPT: {
@@ -2709,16 +2705,10 @@ long kvm_arch_vcpu_ioctl(struct file *filp,
 		if (copy_from_user(&irq, argp, sizeof irq))
 			goto out;
 		r = kvm_vcpu_ioctl_interrupt(vcpu, &irq);
-		if (r)
-			goto out;
-		r = 0;
 		break;
 	}
 	case KVM_NMI: {
 		r = kvm_vcpu_ioctl_nmi(vcpu);
-		if (r)
-			goto out;
-		r = 0;
 		break;
 	}
 	case KVM_SET_CPUID: {
@@ -2729,8 +2719,6 @@ long kvm_arch_vcpu_ioctl(struct file *filp,
 		if (copy_from_user(&cpuid, cpuid_arg, sizeof cpuid))
 			goto out;
 		r = kvm_vcpu_ioctl_set_cpuid(vcpu, &cpuid, cpuid_arg->entries);
-		if (r)
-			goto out;
 		break;
 	}
 	case KVM_SET_CPUID2: {
@@ -2742,8 +2730,6 @@ long kvm_arch_vcpu_ioctl(struct file *filp,
 			goto out;
 		r = kvm_vcpu_ioctl_set_cpuid2(vcpu, &cpuid,
 					      cpuid_arg->entries);
-		if (r)
-			goto out;
 		break;
 	}
 	case KVM_GET_CPUID2: {
@@ -2875,10 +2861,8 @@ long kvm_arch_vcpu_ioctl(struct file *filp,
 	}
 	case KVM_SET_XSAVE: {
 		u.xsave = memdup_user(argp, sizeof(*u.xsave));
-		if (IS_ERR(u.xsave)) {
-			r = PTR_ERR(u.xsave);
-			goto out;
-		}
+		if (IS_ERR(u.xsave))
+			return PTR_ERR(u.xsave);
 
 		r = kvm_vcpu_ioctl_x86_set_xsave(vcpu, u.xsave);
 		break;
@@ -2900,10 +2884,8 @@ long kvm_arch_vcpu_ioctl(struct file *filp,
 	}
 	case KVM_SET_XCRS: {
 		u.xcrs = memdup_user(argp, sizeof(*u.xcrs));
-		if (IS_ERR(u.xcrs)) {
-			r = PTR_ERR(u.xcrs);
-			goto out;
-		}
+		if (IS_ERR(u.xcrs))
+			return PTR_ERR(u.xcrs);
 
 		r = kvm_vcpu_ioctl_x86_set_xcrs(vcpu, u.xcrs);
 		break;
@@ -2951,7 +2933,7 @@ static int kvm_vm_ioctl_set_tss_addr(struct kvm *kvm, unsigned long addr)
 	int ret;
 
 	if (addr > (unsigned int)(-3 * PAGE_SIZE))
-		return -1;
+		return -EINVAL;
 	ret = kvm_x86_ops->set_tss_addr(kvm, addr);
 	return ret;
 }
@@ -3212,8 +3194,6 @@ long kvm_arch_vm_ioctl(struct file *filp,
 	switch (ioctl) {
 	case KVM_SET_TSS_ADDR:
 		r = kvm_vm_ioctl_set_tss_addr(kvm, arg);
-		if (r < 0)
-			goto out;
 		break;
 	case KVM_SET_IDENTITY_MAP_ADDR: {
 		u64 ident_addr;
@@ -3222,14 +3202,10 @@ long kvm_arch_vm_ioctl(struct file *filp,
 		if (copy_from_user(&ident_addr, argp, sizeof ident_addr))
 			goto out;
 		r = kvm_vm_ioctl_set_identity_map_addr(kvm, ident_addr);
-		if (r < 0)
-			goto out;
 		break;
 	}
 	case KVM_SET_NR_MMU_PAGES:
 		r = kvm_vm_ioctl_set_nr_mmu_pages(kvm, arg);
-		if (r)
-			goto out;
 		break;
 	case KVM_GET_NR_MMU_PAGES:
 		r = kvm_vm_ioctl_get_nr_mmu_pages(kvm);
@@ -3320,8 +3296,6 @@ long kvm_arch_vm_ioctl(struct file *filp,
 		r = 0;
 	get_irqchip_out:
 		kfree(chip);
-		if (r)
-			goto out;
 		break;
 	}
 	case KVM_SET_IRQCHIP: {
@@ -3343,8 +3317,6 @@ long kvm_arch_vm_ioctl(struct file *filp,
 		r = 0;
 	set_irqchip_out:
 		kfree(chip);
-		if (r)
-			goto out;
 		break;
 	}
 	case KVM_GET_PIT: {
@@ -3371,9 +3343,6 @@ long kvm_arch_vm_ioctl(struct file *filp,
 		if (!kvm->arch.vpit)
 			goto out;
 		r = kvm_vm_ioctl_set_pit(kvm, &u.ps);
-		if (r)
-			goto out;
-		r = 0;
 		break;
 	}
 	case KVM_GET_PIT2: {
@@ -3397,9 +3366,6 @@ long kvm_arch_vm_ioctl(struct file *filp,
 		if (!kvm->arch.vpit)
 			goto out;
 		r = kvm_vm_ioctl_set_pit2(kvm, &u.ps2);
-		if (r)
-			goto out;
-		r = 0;
 		break;
 	}
 	case KVM_REINJECT_CONTROL: {
@@ -3408,9 +3374,6 @@ long kvm_arch_vm_ioctl(struct file *filp,
 		if (copy_from_user(&control, argp, sizeof(control)))
 			goto out;
 		r = kvm_vm_ioctl_reinject(kvm, &control);
-		if (r)
-			goto out;
-		r = 0;
 		break;
 	}
 	case KVM_XEN_HVM_CONFIG: {
@@ -4495,7 +4458,7 @@ static bool reexecute_instruction(struct kvm_vcpu *vcpu, gva_t gva)
 	 * instruction -> ...
 	 */
 	pfn = gfn_to_pfn(vcpu->kvm, gpa_to_gfn(gpa));
-	if (!is_error_pfn(pfn)) {
+	if (!is_error_noslot_pfn(pfn)) {
 		kvm_release_pfn_clean(pfn);
 		return true;
 	}
@@ -5059,7 +5022,7 @@ out:
 }
 EXPORT_SYMBOL_GPL(kvm_emulate_hypercall);
 
-int emulator_fix_hypercall(struct x86_emulate_ctxt *ctxt)
+static int emulator_fix_hypercall(struct x86_emulate_ctxt *ctxt)
 {
 	struct kvm_vcpu *vcpu = emul_to_vcpu(ctxt);
 	char instruction[3];
@@ -5419,7 +5382,7 @@ static int __vcpu_run(struct kvm_vcpu *vcpu)
 		pr_debug("vcpu %d received sipi with vector # %x\n",
 			 vcpu->vcpu_id, vcpu->arch.sipi_vector);
 		kvm_lapic_reset(vcpu);
-		r = kvm_arch_vcpu_reset(vcpu);
+		r = kvm_vcpu_reset(vcpu);
 		if (r)
 			return r;
 		vcpu->arch.mp_state = KVM_MP_STATE_RUNNABLE;
@@ -6047,7 +6010,7 @@ int kvm_arch_vcpu_setup(struct kvm_vcpu *vcpu)
 	r = vcpu_load(vcpu);
 	if (r)
 		return r;
-	r = kvm_arch_vcpu_reset(vcpu);
+	r = kvm_vcpu_reset(vcpu);
 	if (r == 0)
 		r = kvm_mmu_setup(vcpu);
 	vcpu_put(vcpu);
@@ -6069,7 +6032,7 @@ void kvm_arch_vcpu_destroy(struct kvm_vcpu *vcpu)
 	kvm_x86_ops->vcpu_free(vcpu);
 }
 
-int kvm_arch_vcpu_reset(struct kvm_vcpu *vcpu)
+static int kvm_vcpu_reset(struct kvm_vcpu *vcpu)
 {
 	atomic_set(&vcpu->arch.nmi_queued, 0);
 	vcpu->arch.nmi_pending = 0;

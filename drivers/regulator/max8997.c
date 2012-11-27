@@ -933,7 +933,7 @@ static struct regulator_desc regulators[] = {
 				  max8997_charger_fixedstate_ops),
 };
 
-static __devinit int max8997_pmic_probe(struct platform_device *pdev)
+static int max8997_pmic_probe(struct platform_device *pdev)
 {
 	struct max8997_dev *iodev = dev_get_drvdata(pdev->dev.parent);
 	struct max8997_platform_data *pdata = dev_get_platdata(iodev->dev);
@@ -941,7 +941,7 @@ static __devinit int max8997_pmic_probe(struct platform_device *pdev)
 	struct regulator_dev **rdev;
 	struct max8997_data *max8997;
 	struct i2c_client *i2c;
-	int i, ret, size;
+	int i, ret, size, nr_dvs;
 	u8 max_buck1 = 0, max_buck2 = 0, max_buck5 = 0;
 
 	if (!pdata) {
@@ -973,7 +973,10 @@ static __devinit int max8997_pmic_probe(struct platform_device *pdev)
 	memcpy(max8997->buck125_gpios, pdata->buck125_gpios, sizeof(int) * 3);
 	max8997->ignore_gpiodvs_side_effect = pdata->ignore_gpiodvs_side_effect;
 
-	for (i = 0; i < 8; i++) {
+	nr_dvs = (pdata->buck1_gpiodvs || pdata->buck2_gpiodvs ||
+			pdata->buck5_gpiodvs) ? 8 : 1;
+
+	for (i = 0; i < nr_dvs; i++) {
 		max8997->buck1_vol[i] = ret =
 			max8997_get_voltage_proper_val(
 					&buck1245_voltage_map_desc,
@@ -1017,6 +1020,19 @@ static __devinit int max8997_pmic_probe(struct platform_device *pdev)
 				max_buck2, 0x3f);
 		max8997_update_reg(i2c, MAX8997_REG_BUCK5DVS1 + i,
 				max_buck5, 0x3f);
+	}
+
+	/* Initialize all the DVS related BUCK registers */
+	for (i = 0; i < nr_dvs; i++) {
+		max8997_update_reg(i2c, MAX8997_REG_BUCK1DVS1 + i,
+				max8997->buck1_vol[i],
+				0x3f);
+		max8997_update_reg(i2c, MAX8997_REG_BUCK2DVS1 + i,
+				max8997->buck2_vol[i],
+				0x3f);
+		max8997_update_reg(i2c, MAX8997_REG_BUCK5DVS1 + i,
+				max8997->buck5_vol[i],
+				0x3f);
 	}
 
 	/*
@@ -1068,19 +1084,6 @@ static __devinit int max8997_pmic_probe(struct platform_device *pdev)
 	max8997_update_reg(i2c, MAX8997_REG_BUCK5CTRL, (pdata->buck5_gpiodvs) ?
 			(1 << 1) : (0 << 1), 1 << 1);
 
-	/* Initialize all the DVS related BUCK registers */
-	for (i = 0; i < 8; i++) {
-		max8997_update_reg(i2c, MAX8997_REG_BUCK1DVS1 + i,
-				max8997->buck1_vol[i],
-				0x3f);
-		max8997_update_reg(i2c, MAX8997_REG_BUCK2DVS1 + i,
-				max8997->buck2_vol[i],
-				0x3f);
-		max8997_update_reg(i2c, MAX8997_REG_BUCK5DVS1 + i,
-				max8997->buck5_vol[i],
-				0x3f);
-	}
-
 	/* Misc Settings */
 	max8997->ramp_delay = 10; /* set 10mV/us, which is the default */
 	max8997_write_reg(i2c, MAX8997_REG_BUCKRAMP, (0xf << 4) | 0x9);
@@ -1120,7 +1123,7 @@ err_out:
 	return ret;
 }
 
-static int __devexit max8997_pmic_remove(struct platform_device *pdev)
+static int max8997_pmic_remove(struct platform_device *pdev)
 {
 	struct max8997_data *max8997 = platform_get_drvdata(pdev);
 	struct regulator_dev **rdev = max8997->rdev;
@@ -1143,7 +1146,7 @@ static struct platform_driver max8997_pmic_driver = {
 		.owner = THIS_MODULE,
 	},
 	.probe = max8997_pmic_probe,
-	.remove = __devexit_p(max8997_pmic_remove),
+	.remove = max8997_pmic_remove,
 	.id_table = max8997_pmic_id,
 };
 

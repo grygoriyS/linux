@@ -1836,9 +1836,10 @@ static int __alc_build_controls(struct hda_codec *codec)
 			return err;
 	}
 	if (spec->multiout.dig_out_nid) {
-		err = snd_hda_create_spdif_out_ctls(codec,
-						    spec->multiout.dig_out_nid,
-						    spec->multiout.dig_out_nid);
+		err = snd_hda_create_dig_out_ctls(codec,
+						  spec->multiout.dig_out_nid,
+						  spec->multiout.dig_out_nid,
+						  spec->pcm_rec[1].pcm_type);
 		if (err < 0)
 			return err;
 		if (!spec->no_analog) {
@@ -2259,6 +2260,10 @@ static int alc_build_pcms(struct hda_codec *codec)
 		info->stream[SNDRV_PCM_STREAM_PLAYBACK].nid = spec->multiout.dac_nids[0];
 		info->stream[SNDRV_PCM_STREAM_PLAYBACK].channels_max =
 			spec->multiout.max_channels;
+		if (spec->autocfg.line_out_type == AUTO_PIN_SPEAKER_OUT &&
+		    spec->autocfg.line_outs == 2)
+			info->stream[SNDRV_PCM_STREAM_PLAYBACK].chmap =
+				snd_pcm_2_1_chmaps;
 	}
 	if (spec->adc_nids) {
 		p = spec->stream_analog_capture;
@@ -2399,7 +2404,6 @@ static void alc_free(struct hda_codec *codec)
 	if (!spec)
 		return;
 
-	alc_shutup(codec);
 	alc_free_kctls(codec);
 	alc_free_bind_ctls(codec);
 	snd_hda_gen_free(&spec->gen);
@@ -6009,6 +6013,16 @@ static void alc269_fixup_mic2_mute(struct hda_codec *codec,
 	}
 }
 
+static void alc271_hp_gate_mic_jack(struct hda_codec *codec,
+				    const struct alc_fixup *fix,
+				    int action)
+{
+	struct alc_spec *spec = codec->spec;
+
+	if (action == ALC_FIXUP_ACT_PROBE)
+		snd_hda_jack_set_gating_jack(codec, spec->ext_mic_pin,
+					     spec->autocfg.hp_pins[0]);
+}
 
 enum {
 	ALC269_FIXUP_SONY_VAIO,
@@ -6031,6 +6045,8 @@ enum {
 	ALC269_FIXUP_INV_DMIC,
 	ALC269_FIXUP_LENOVO_DOCK,
 	ALC269_FIXUP_PINCFG_NO_HP_TO_LINEOUT,
+	ALC271_FIXUP_AMIC_MIC2,
+	ALC271_FIXUP_HP_GATE_MIC_JACK,
 };
 
 static const struct alc_fixup alc269_fixups[] = {
@@ -6175,6 +6191,22 @@ static const struct alc_fixup alc269_fixups[] = {
 		.type = ALC_FIXUP_FUNC,
 		.v.func = alc269_fixup_pincfg_no_hp_to_lineout,
 	},
+	[ALC271_FIXUP_AMIC_MIC2] = {
+		.type = ALC_FIXUP_PINS,
+		.v.pins = (const struct alc_pincfg[]) {
+			{ 0x14, 0x99130110 }, /* speaker */
+			{ 0x19, 0x01a19c20 }, /* mic */
+			{ 0x1b, 0x99a7012f }, /* int-mic */
+			{ 0x21, 0x0121401f }, /* HP out */
+			{ }
+		},
+	},
+	[ALC271_FIXUP_HP_GATE_MIC_JACK] = {
+		.type = ALC_FIXUP_FUNC,
+		.v.func = alc271_hp_gate_mic_jack,
+		.chained = true,
+		.chain_id = ALC271_FIXUP_AMIC_MIC2,
+	},
 };
 
 static const struct snd_pci_quirk alc269_fixup_tbl[] = {
@@ -6195,6 +6227,7 @@ static const struct snd_pci_quirk alc269_fixup_tbl[] = {
 	SND_PCI_QUIRK(0x104d, 0x9084, "Sony VAIO", ALC275_FIXUP_SONY_HWEQ),
 	SND_PCI_QUIRK_VENDOR(0x104d, "Sony VAIO", ALC269_FIXUP_SONY_VAIO),
 	SND_PCI_QUIRK(0x1028, 0x0470, "Dell M101z", ALC269_FIXUP_DELL_M101Z),
+	SND_PCI_QUIRK(0x1025, 0x0742, "Acer AO756", ALC271_FIXUP_HP_GATE_MIC_JACK),
 	SND_PCI_QUIRK_VENDOR(0x1025, "Acer Aspire", ALC271_FIXUP_DMIC),
 	SND_PCI_QUIRK(0x10cf, 0x1475, "Lifebook", ALC269_FIXUP_LIFEBOOK),
 	SND_PCI_QUIRK(0x17aa, 0x20f2, "Thinkpad SL410/510", ALC269_FIXUP_SKU_IGNORE),

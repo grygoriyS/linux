@@ -42,8 +42,8 @@
 #include "scrm54xx.h"
 
 /* OMAP4 modulemode control */
-#define OMAP54XX_MODULEMODE_HWCTRL			0
-#define OMAP54XX_MODULEMODE_SWCTRL			1
+#define OMAP54XX_MODULEMODE_HWCTRL		0
+#define OMAP54XX_MODULEMODE_SWCTRL		1
 
 /* Root clocks */
 
@@ -77,41 +77,11 @@ DEFINE_CLK_FIXED_RATE(virt_27000000_ck, CLK_IS_ROOT, 27000000, 0x0);
 
 DEFINE_CLK_FIXED_RATE(virt_38400000_ck, CLK_IS_ROOT, 38400000, 0x0);
 
-static const struct clksel_rate div_1_5_rates[] = {
-	{ .div = 1, .val = 5, .flags = RATE_IN_54XX },
-	{ .div = 0 },
-};
-
-static const struct clksel_rate div_1_6_rates[] = {
-	{ .div = 1, .val = 6, .flags = RATE_IN_54XX },
-	{ .div = 0 },
-};
-
-static const struct clksel_rate div_1_7_rates[] = {
-	{ .div = 1, .val = 7, .flags = RATE_IN_54XX },
-	{ .div = 0 },
-};
-
-static const struct clksel sys_clkin_sel[] = {
-	{ .parent = &virt_12000000_ck, .rates = div_1_1_rates },
-	{ .parent = &virt_13000000_ck, .rates = div_1_2_rates },
-	{ .parent = &virt_16800000_ck, .rates = div_1_3_rates },
-	{ .parent = &virt_19200000_ck, .rates = div_1_4_rates },
-	{ .parent = &virt_26000000_ck, .rates = div_1_5_rates },
-	{ .parent = &virt_27000000_ck, .rates = div_1_6_rates },
-	{ .parent = &virt_38400000_ck, .rates = div_1_7_rates },
-	{ .parent = NULL },
-};
 
 static const char *sys_clkin_parents[] = {
-	"virt_12000000_ck",
-	"virt_13000000_ck",
-	"virt_16800000_ck",
-	"virt_19200000_ck",
-	"virt_26000000_ck",
-	"virt_27000000_ck",
+	"virt_12000000_ck", "virt_13000000_ck", "virt_16800000_ck",
+	"virt_19200000_ck", "virt_26000000_ck", "virt_27000000_ck",
 	"virt_38400000_ck",
-
 };
 
 DEFINE_CLK_MUX(sys_clkin, sys_clkin_parents, NULL, 0x0, OMAP54XX_CM_CLKSEL_SYS,
@@ -150,14 +120,15 @@ static struct dpll_data dpll_abe_dd = {
 	.enable_mask	= OMAP54XX_DPLL_EN_MASK,
 	.autoidle_mask	= OMAP54XX_AUTO_DPLL_MODE_MASK,
 	.idlest_mask	= OMAP54XX_ST_DPLL_CLK_MASK,
+	.m4xen_mask	= OMAP54XX_DPLL_REGM4XEN_MASK,
+	.lpmode_mask	= OMAP54XX_DPLL_LPMODE_EN_MASK,
 	.max_multiplier	= 2047,
 	.max_divider	= 128,
 	.min_divider	= 1,
 };
 
-
 static const char *dpll_abe_ck_parents[] = {
-	"abe_dpll_clk_mux",
+	"abe_dpll_clk_mux", "abe_dpll_bypass_clk_mux"
 };
 
 static struct clk dpll_abe_ck;
@@ -244,9 +215,8 @@ static struct dpll_data dpll_core_dd = {
 	.min_divider	= 1,
 };
 
-
 static const char *dpll_core_ck_parents[] = {
-	"sys_clkin",
+	"sys_clkin", "dpll_abe_m3x2_ck"
 };
 
 static struct clk dpll_core_ck;
@@ -376,6 +346,9 @@ static struct dpll_data dpll_iva_dd = {
 	.min_divider	= 1,
 };
 
+static const char *dpll_iva_ck_parents[] = {
+	"sys_clkin", "iva_dpll_hs_clk_div"
+};
 
 static struct clk dpll_iva_ck;
 
@@ -396,7 +369,7 @@ static struct clk_hw_omap dpll_iva_ck_hw = {
 	.ops		= &clkhwops_omap3_dpll,
 };
 
-DEFINE_STRUCT_CLK(dpll_iva_ck, dpll_core_ck_parents, dpll_iva_ck_ops);
+DEFINE_STRUCT_CLK(dpll_iva_ck, dpll_iva_ck_parents, dpll_iva_ck_ops);
 
 static const char *dpll_iva_x2_ck_parents[] = {
 	"dpll_iva_ck",
@@ -450,6 +423,9 @@ static struct dpll_data dpll_mpu_dd = {
 	.min_divider	= 1,
 };
 
+static const char *dpll_mpu_ck_parents[] = {
+	"sys_clkin", "mpu_dpll_hs_clk_div"
+};
 
 static struct clk dpll_mpu_ck;
 
@@ -461,7 +437,7 @@ static struct clk_hw_omap dpll_mpu_ck_hw = {
 	.ops		= &clkhwops_omap3_dpll,
 };
 
-DEFINE_STRUCT_CLK(dpll_mpu_ck, dpll_core_ck_parents, dpll_iva_ck_ops);
+DEFINE_STRUCT_CLK(dpll_mpu_ck, dpll_mpu_ck_parents, dpll_iva_ck_ops);
 
 DEFINE_CLK_OMAP_HSDIVIDER63(dpll_mpu_m2_ck, "dpll_mpu_ck", &dpll_mpu_ck, 0x0,
 			    OMAP54XX_CM_DIV_M2_DPLL_MPU,
@@ -489,6 +465,9 @@ static struct dpll_data dpll_per_dd = {
 	.min_divider	= 1,
 };
 
+static const char *dpll_per_ck_parents[] = {
+	"sys_clkin", "per_dpll_hs_clk_div"
+};
 
 static struct clk dpll_per_ck;
 
@@ -500,7 +479,7 @@ static struct clk_hw_omap dpll_per_ck_hw = {
 	.ops		= &clkhwops_omap3_dpll,
 };
 
-DEFINE_STRUCT_CLK(dpll_per_ck, dpll_core_ck_parents, dpll_iva_ck_ops);
+DEFINE_STRUCT_CLK(dpll_per_ck, dpll_per_ck_parents, dpll_iva_ck_ops);
 
 static const char *dpll_per_x2_ck_parents[] = {
 	"dpll_per_ck",
@@ -559,6 +538,9 @@ static struct dpll_data dpll_unipro1_dd = {
 	.min_divider	= 1,
 };
 
+static const char *dpll_unipro1_ck_parents[] = {
+	"sys_clkin",
+};
 
 static struct clk dpll_unipro1_ck;
 
@@ -570,7 +552,7 @@ static struct clk_hw_omap dpll_unipro1_ck_hw = {
 	.ops		= &clkhwops_omap3_dpll,
 };
 
-DEFINE_STRUCT_CLK(dpll_unipro1_ck, dpll_core_ck_parents, dpll_iva_ck_ops);
+DEFINE_STRUCT_CLK(dpll_unipro1_ck, dpll_unipro1_ck_parents, dpll_iva_ck_ops);
 
 static const char *dpll_unipro1_clkdcoldo_parents[] = {
 	"dpll_unipro1_ck",
@@ -612,7 +594,6 @@ static struct dpll_data dpll_unipro2_dd = {
 	.min_divider	= 1,
 };
 
-
 static struct clk dpll_unipro2_ck;
 
 static struct clk_hw_omap dpll_unipro2_ck_hw = {
@@ -623,7 +604,7 @@ static struct clk_hw_omap dpll_unipro2_ck_hw = {
 	.ops		= &clkhwops_omap3_dpll,
 };
 
-DEFINE_STRUCT_CLK(dpll_unipro2_ck, dpll_core_ck_parents, dpll_iva_ck_ops);
+DEFINE_STRUCT_CLK(dpll_unipro2_ck, dpll_unipro1_ck_parents, dpll_iva_ck_ops);
 
 static const char *dpll_unipro2_clkdcoldo_parents[] = {
 	"dpll_unipro2_ck",
@@ -670,6 +651,9 @@ static struct dpll_data dpll_usb_dd = {
 	.min_divider	= 1,
 };
 
+static const char *dpll_usb_ck_parents[] = {
+	"sys_clkin", "usb_dpll_hs_clk_div"
+};
 
 static struct clk dpll_usb_ck;
 
@@ -692,7 +676,7 @@ static struct clk_hw_omap dpll_usb_ck_hw = {
 	.ops		= &clkhwops_omap3_dpll,
 };
 
-DEFINE_STRUCT_CLK(dpll_usb_ck, dpll_core_ck_parents, dpll_usb_ck_ops);
+DEFINE_STRUCT_CLK(dpll_usb_ck, dpll_usb_ck_parents, dpll_usb_ck_ops);
 
 static const char *dpll_usb_clkdcoldo_parents[] = {
 	"dpll_usb_ck",
@@ -811,372 +795,101 @@ DEFINE_STRUCT_CLK(l4_root_clk_div, gpu_l3_iclk_parents, c2c_fclk_ops);
 
 /* Leaf clocks controlled by modules */
 
-static const char *dss_32khz_clk_parents[] = {
-	"sys_32k_ck",
-};
-
-static struct clk dss_32khz_clk;
-
-static const struct clk_ops dss_32khz_clk_ops = {
-	.enable		= &omap2_dflt_clk_enable,
-	.disable	= &omap2_dflt_clk_disable,
-	.is_enabled	= &omap2_dflt_clk_is_enabled,
-	.init	= &omap2_init_clk_clkdm,
-};
-
-static struct clk_hw_omap dss_32khz_clk_hw = {
-	.hw = {
-		.clk = &dss_32khz_clk,
-	},
-	.clkdm_name	= "dss_clkdm",
-	.enable_reg	= OMAP54XX_CM_DSS_DSS_CLKCTRL,
-	.enable_bit	= OMAP54XX_OPTFCLKEN_32KHZ_CLK_SHIFT,
-};
-
-DEFINE_STRUCT_CLK(dss_32khz_clk, dss_32khz_clk_parents, dss_32khz_clk_ops);
-
-static const char *dss_48mhz_clk_parents[] = {
-	"func_48m_fclk",
-};
-
-static struct clk dss_48mhz_clk;
-
-static struct clk_hw_omap dss_48mhz_clk_hw = {
-	.hw = {
-		.clk = &dss_48mhz_clk,
-	},
-	.clkdm_name	= "dss_clkdm",
-	.enable_reg	= OMAP54XX_CM_DSS_DSS_CLKCTRL,
-	.enable_bit	= OMAP54XX_OPTFCLKEN_48MHZ_CLK_SHIFT,
-};
-
-DEFINE_STRUCT_CLK(dss_48mhz_clk, dss_48mhz_clk_parents, dss_32khz_clk_ops);
-
-static const char *dss_dss_clk_parents[] = {
-	"dpll_per_h12x2_ck",
-};
-
-static struct clk dss_dss_clk;
-
-static struct clk_hw_omap dss_dss_clk_hw = {
-	.hw = {
-		.clk = &dss_dss_clk,
-	},
-	.clkdm_name	= "dss_clkdm",
-	.enable_reg	= OMAP54XX_CM_DSS_DSS_CLKCTRL,
-	.enable_bit	= OMAP54XX_OPTFCLKEN_DSSCLK_SHIFT,
-};
-
-DEFINE_STRUCT_CLK(dss_dss_clk, dss_dss_clk_parents, dss_32khz_clk_ops);
-
-static const char *dss_sys_clk_parents[] = {
-	"dss_syc_gfclk_div",
-};
-
-static struct clk dss_sys_clk;
-
-static struct clk_hw_omap dss_sys_clk_hw = {
-	.hw = {
-		.clk = &dss_sys_clk,
-	},
-	.clkdm_name	= "dss_clkdm",
-	.enable_reg	= OMAP54XX_CM_DSS_DSS_CLKCTRL,
-	.enable_bit	= OMAP54XX_OPTFCLKEN_SYS_CLK_SHIFT,
-};
-
-DEFINE_STRUCT_CLK(dss_sys_clk, dss_sys_clk_parents, dss_32khz_clk_ops);
-
-static struct clk gpio1_dbclk;
-
-static struct clk_hw_omap gpio1_dbclk_hw = {
-	.hw = {
-		.clk = &gpio1_dbclk,
-	},
-	.clkdm_name	= "wkupaon_clkdm",
-	.enable_reg	= OMAP54XX_CM_WKUPAON_GPIO1_CLKCTRL,
-	.enable_bit	= OMAP54XX_OPTFCLKEN_DBCLK_SHIFT,
-};
-
-DEFINE_STRUCT_CLK(gpio1_dbclk, dss_32khz_clk_parents, dss_32khz_clk_ops);
-
-static struct clk gpio2_dbclk;
-
-static struct clk_hw_omap gpio2_dbclk_hw = {
-	.hw = {
-		.clk = &gpio2_dbclk,
-	},
-	.clkdm_name	= "l4per_clkdm",
-	.enable_reg	= OMAP54XX_CM_L4PER_GPIO2_CLKCTRL,
-	.enable_bit	= OMAP54XX_OPTFCLKEN_DBCLK_SHIFT,
-};
-
-DEFINE_STRUCT_CLK(gpio2_dbclk, dss_32khz_clk_parents, dss_32khz_clk_ops);
-
-static struct clk gpio3_dbclk;
-
-static struct clk_hw_omap gpio3_dbclk_hw = {
-	.hw = {
-		.clk = &gpio3_dbclk,
-	},
-	.clkdm_name	= "l4per_clkdm",
-	.enable_reg	= OMAP54XX_CM_L4PER_GPIO3_CLKCTRL,
-	.enable_bit	= OMAP54XX_OPTFCLKEN_DBCLK_SHIFT,
-};
-
-DEFINE_STRUCT_CLK(gpio3_dbclk, dss_32khz_clk_parents, dss_32khz_clk_ops);
-
-static struct clk gpio4_dbclk;
-
-static struct clk_hw_omap gpio4_dbclk_hw = {
-	.hw = {
-		.clk = &gpio4_dbclk,
-	},
-	.clkdm_name	= "l4per_clkdm",
-	.enable_reg	= OMAP54XX_CM_L4PER_GPIO4_CLKCTRL,
-	.enable_bit	= OMAP54XX_OPTFCLKEN_DBCLK_SHIFT,
-};
-
-DEFINE_STRUCT_CLK(gpio4_dbclk, dss_32khz_clk_parents, dss_32khz_clk_ops);
-
-static struct clk gpio5_dbclk;
-
-static struct clk_hw_omap gpio5_dbclk_hw = {
-	.hw = {
-		.clk = &gpio5_dbclk,
-	},
-	.clkdm_name	= "l4per_clkdm",
-	.enable_reg	= OMAP54XX_CM_L4PER_GPIO5_CLKCTRL,
-	.enable_bit	= OMAP54XX_OPTFCLKEN_DBCLK_SHIFT,
-};
-
-DEFINE_STRUCT_CLK(gpio5_dbclk, dss_32khz_clk_parents, dss_32khz_clk_ops);
-
-static struct clk gpio6_dbclk;
-
-static struct clk_hw_omap gpio6_dbclk_hw = {
-	.hw = {
-		.clk = &gpio6_dbclk,
-	},
-	.clkdm_name	= "l4per_clkdm",
-	.enable_reg	= OMAP54XX_CM_L4PER_GPIO6_CLKCTRL,
-	.enable_bit	= OMAP54XX_OPTFCLKEN_DBCLK_SHIFT,
-};
-
-DEFINE_STRUCT_CLK(gpio6_dbclk, dss_32khz_clk_parents, dss_32khz_clk_ops);
-
-static struct clk gpio7_dbclk;
-
-static struct clk_hw_omap gpio7_dbclk_hw = {
-	.hw = {
-		.clk = &gpio7_dbclk,
-	},
-	.clkdm_name	= "l4per_clkdm",
-	.enable_reg	= OMAP54XX_CM_L4PER_GPIO7_CLKCTRL,
-	.enable_bit	= OMAP54XX_OPTFCLKEN_DBCLK_SHIFT,
-};
-
-DEFINE_STRUCT_CLK(gpio7_dbclk, dss_32khz_clk_parents, dss_32khz_clk_ops);
-
-static struct clk gpio8_dbclk;
-
-static struct clk_hw_omap gpio8_dbclk_hw = {
-	.hw = {
-		.clk = &gpio8_dbclk,
-	},
-	.clkdm_name	= "l4per_clkdm",
-	.enable_reg	= OMAP54XX_CM_L4PER_GPIO8_CLKCTRL,
-	.enable_bit	= OMAP54XX_OPTFCLKEN_DBCLK_SHIFT,
-};
-
-DEFINE_STRUCT_CLK(gpio8_dbclk, dss_32khz_clk_parents, dss_32khz_clk_ops);
-
-static const char *iss_ctrlclk_parents[] = {
-	"func_96m_fclk",
-};
-
-static struct clk iss_ctrlclk;
-
-static struct clk_hw_omap iss_ctrlclk_hw = {
-	.hw = {
-		.clk = &iss_ctrlclk,
-	},
-	.clkdm_name	= "cam_clkdm",
-	.enable_reg	= OMAP54XX_CM_CAM_ISS_CLKCTRL,
-	.enable_bit	= OMAP54XX_OPTFCLKEN_CTRLCLK_SHIFT,
-};
-
-DEFINE_STRUCT_CLK(iss_ctrlclk, iss_ctrlclk_parents, dss_32khz_clk_ops);
-
-static const char *lli_txphy_clk_parents[] = {
-	"dpll_unipro1_clkdcoldo",
-};
-
-static struct clk lli_txphy_clk;
-
-static struct clk_hw_omap lli_txphy_clk_hw = {
-	.hw = {
-		.clk = &lli_txphy_clk,
-	},
-	.clkdm_name	= "mipiext_clkdm",
-	.enable_reg	= OMAP54XX_CM_MIPIEXT_LLI_CLKCTRL,
-	.enable_bit	= OMAP54XX_OPTFCLKEN_TXPHY_CLK_SHIFT,
-};
-
-DEFINE_STRUCT_CLK(lli_txphy_clk, lli_txphy_clk_parents, dss_32khz_clk_ops);
-
-static const char *lli_txphy_ls_clk_parents[] = {
-	"dpll_unipro1_m2_ck",
-};
-
-static struct clk lli_txphy_ls_clk;
-
-static struct clk_hw_omap lli_txphy_ls_clk_hw = {
-	.hw = {
-		.clk = &lli_txphy_ls_clk,
-	},
-	.clkdm_name	= "mipiext_clkdm",
-	.enable_reg	= OMAP54XX_CM_MIPIEXT_LLI_CLKCTRL,
-	.enable_bit	= OMAP54XX_OPTFCLKEN_TXPHY_LS_CLK_SHIFT,
-};
-
-DEFINE_STRUCT_CLK(lli_txphy_ls_clk, lli_txphy_ls_clk_parents,
-		  dss_32khz_clk_ops);
-
-static struct clk mmc1_32khz_clk;
-
-static struct clk_hw_omap mmc1_32khz_clk_hw = {
-	.hw = {
-		.clk = &mmc1_32khz_clk,
-	},
-	.clkdm_name	= "l3init_clkdm",
-	.enable_reg	= OMAP54XX_CM_L3INIT_MMC1_CLKCTRL,
-	.enable_bit	= OMAP54XX_OPTFCLKEN_32KHZ_CLK_8_8_SHIFT,
-};
-
-DEFINE_STRUCT_CLK(mmc1_32khz_clk, dss_32khz_clk_parents, dss_32khz_clk_ops);
-
-static struct clk sata_ref_clk;
-
-static struct clk_hw_omap sata_ref_clk_hw = {
-	.hw = {
-		.clk = &sata_ref_clk,
-	},
-	.clkdm_name	= "l3init_clkdm",
-	.enable_reg	= OMAP54XX_CM_L3INIT_SATA_CLKCTRL,
-	.enable_bit	= OMAP54XX_OPTFCLKEN_REF_CLK_SHIFT,
-};
-
-DEFINE_STRUCT_CLK(sata_ref_clk, dss_syc_gfclk_div_parents, dss_32khz_clk_ops);
-
-static const char *slimbus1_slimbus_clk_parents[] = {
-	"slimbus_clk",
-};
-
-static struct clk slimbus1_slimbus_clk;
-
-static struct clk_hw_omap slimbus1_slimbus_clk_hw = {
-	.hw = {
-		.clk = &slimbus1_slimbus_clk,
-	},
-	.clkdm_name	= "abe_clkdm",
-	.enable_reg	= OMAP54XX_CM_ABE_SLIMBUS1_CLKCTRL,
-	.enable_bit	= OMAP54XX_OPTFCLKEN_SLIMBUS_CLK_SHIFT,
-};
-
-DEFINE_STRUCT_CLK(slimbus1_slimbus_clk, slimbus1_slimbus_clk_parents,
-		  dss_32khz_clk_ops);
-
-static const char *usb_host_hs_hsic480m_p1_clk_parents[] = {
-	"dpll_usb_m2_ck",
-};
-
-static struct clk usb_host_hs_hsic480m_p1_clk;
-
-static struct clk_hw_omap usb_host_hs_hsic480m_p1_clk_hw = {
-	.hw = {
-		.clk = &usb_host_hs_hsic480m_p1_clk,
-	},
-	.clkdm_name	= "l3init_clkdm",
-	.enable_reg	= OMAP54XX_CM_L3INIT_USB_HOST_HS_CLKCTRL,
-	.enable_bit	= OMAP54XX_OPTFCLKEN_HSIC480M_P1_CLK_SHIFT,
-};
-
-DEFINE_STRUCT_CLK(usb_host_hs_hsic480m_p1_clk,
-		  usb_host_hs_hsic480m_p1_clk_parents, dss_32khz_clk_ops);
-
-static struct clk usb_host_hs_hsic480m_p2_clk;
-
-static struct clk_hw_omap usb_host_hs_hsic480m_p2_clk_hw = {
-	.hw = {
-		.clk = &usb_host_hs_hsic480m_p2_clk,
-	},
-	.clkdm_name	= "l3init_clkdm",
-	.enable_reg	= OMAP54XX_CM_L3INIT_USB_HOST_HS_CLKCTRL,
-	.enable_bit	= OMAP54XX_OPTFCLKEN_HSIC480M_P2_CLK_SHIFT,
-};
-
-DEFINE_STRUCT_CLK(usb_host_hs_hsic480m_p2_clk,
-		  usb_host_hs_hsic480m_p1_clk_parents, dss_32khz_clk_ops);
-
-static struct clk usb_host_hs_hsic480m_p3_clk;
-
-static struct clk_hw_omap usb_host_hs_hsic480m_p3_clk_hw = {
-	.hw = {
-		.clk = &usb_host_hs_hsic480m_p3_clk,
-	},
-	.clkdm_name	= "l3init_clkdm",
-	.enable_reg	= OMAP54XX_CM_L3INIT_USB_HOST_HS_CLKCTRL,
-	.enable_bit	= OMAP54XX_OPTFCLKEN_HSIC480M_P3_CLK_SHIFT,
-};
-
-DEFINE_STRUCT_CLK(usb_host_hs_hsic480m_p3_clk,
-		  usb_host_hs_hsic480m_p1_clk_parents, dss_32khz_clk_ops);
-
-static const char *usb_host_hs_hsic60m_p1_clk_parents[] = {
-	"l3init_60m_fclk",
-};
-
-static struct clk usb_host_hs_hsic60m_p1_clk;
-
-static struct clk_hw_omap usb_host_hs_hsic60m_p1_clk_hw = {
-	.hw = {
-		.clk = &usb_host_hs_hsic60m_p1_clk,
-	},
-	.clkdm_name	= "l3init_clkdm",
-	.enable_reg	= OMAP54XX_CM_L3INIT_USB_HOST_HS_CLKCTRL,
-	.enable_bit	= OMAP54XX_OPTFCLKEN_HSIC60M_P1_CLK_SHIFT,
-};
-
-DEFINE_STRUCT_CLK(usb_host_hs_hsic60m_p1_clk,
-		  usb_host_hs_hsic60m_p1_clk_parents, dss_32khz_clk_ops);
-
-static struct clk usb_host_hs_hsic60m_p2_clk;
-
-static struct clk_hw_omap usb_host_hs_hsic60m_p2_clk_hw = {
-	.hw = {
-		.clk = &usb_host_hs_hsic60m_p2_clk,
-	},
-	.clkdm_name	= "l3init_clkdm",
-	.enable_reg	= OMAP54XX_CM_L3INIT_USB_HOST_HS_CLKCTRL,
-	.enable_bit	= OMAP54XX_OPTFCLKEN_HSIC60M_P2_CLK_SHIFT,
-};
-
-DEFINE_STRUCT_CLK(usb_host_hs_hsic60m_p2_clk,
-		  usb_host_hs_hsic60m_p1_clk_parents, dss_32khz_clk_ops);
-
-static struct clk usb_host_hs_hsic60m_p3_clk;
-
-static struct clk_hw_omap usb_host_hs_hsic60m_p3_clk_hw = {
-	.hw = {
-		.clk = &usb_host_hs_hsic60m_p3_clk,
-	},
-	.clkdm_name	= "l3init_clkdm",
-	.enable_reg	= OMAP54XX_CM_L3INIT_USB_HOST_HS_CLKCTRL,
-	.enable_bit	= OMAP54XX_OPTFCLKEN_HSIC60M_P3_CLK_SHIFT,
-};
-
-DEFINE_STRUCT_CLK(usb_host_hs_hsic60m_p3_clk,
-		  usb_host_hs_hsic60m_p1_clk_parents, dss_32khz_clk_ops);
+DEFINE_CLK_GATE(dss_32khz_clk, "sys_32k_ck", &sys_32k_ck, 0x0,
+		OMAP54XX_CM_DSS_DSS_CLKCTRL, OMAP54XX_OPTFCLKEN_32KHZ_CLK_SHIFT,
+		0x0, NULL);
+
+DEFINE_CLK_GATE(dss_48mhz_clk, "func_48m_fclk", &func_48m_fclk, 0x0,
+		OMAP54XX_CM_DSS_DSS_CLKCTRL, OMAP54XX_OPTFCLKEN_48MHZ_CLK_SHIFT,
+		0x0, NULL);
+
+DEFINE_CLK_GATE(dss_dss_clk, "dpll_per_h12x2_ck", &dpll_per_h12x2_ck, 0x0,
+		OMAP54XX_CM_DSS_DSS_CLKCTRL, OMAP54XX_OPTFCLKEN_DSSCLK_SHIFT,
+		0x0, NULL);
+
+DEFINE_CLK_GATE(dss_sys_clk, "dss_syc_gfclk_div", &dss_syc_gfclk_div, 0x0,
+		OMAP54XX_CM_DSS_DSS_CLKCTRL, OMAP54XX_OPTFCLKEN_SYS_CLK_SHIFT,
+		0x0, NULL);
+
+DEFINE_CLK_GATE(gpio1_dbclk, "sys_32k_ck", &sys_32k_ck, 0x0,
+		OMAP54XX_CM_WKUPAON_GPIO1_CLKCTRL,
+		OMAP54XX_OPTFCLKEN_DBCLK_SHIFT, 0x0, NULL);
+
+DEFINE_CLK_GATE(gpio2_dbclk, "sys_32k_ck", &sys_32k_ck, 0x0,
+		OMAP54XX_CM_L4PER_GPIO2_CLKCTRL, OMAP54XX_OPTFCLKEN_DBCLK_SHIFT,
+		0x0, NULL);
+
+DEFINE_CLK_GATE(gpio3_dbclk, "sys_32k_ck", &sys_32k_ck, 0x0,
+		OMAP54XX_CM_L4PER_GPIO3_CLKCTRL, OMAP54XX_OPTFCLKEN_DBCLK_SHIFT,
+		0x0, NULL);
+
+DEFINE_CLK_GATE(gpio4_dbclk, "sys_32k_ck", &sys_32k_ck, 0x0,
+		OMAP54XX_CM_L4PER_GPIO4_CLKCTRL, OMAP54XX_OPTFCLKEN_DBCLK_SHIFT,
+		0x0, NULL);
+
+DEFINE_CLK_GATE(gpio5_dbclk, "sys_32k_ck", &sys_32k_ck, 0x0,
+		OMAP54XX_CM_L4PER_GPIO5_CLKCTRL, OMAP54XX_OPTFCLKEN_DBCLK_SHIFT,
+		0x0, NULL);
+
+DEFINE_CLK_GATE(gpio6_dbclk, "sys_32k_ck", &sys_32k_ck, 0x0,
+		OMAP54XX_CM_L4PER_GPIO6_CLKCTRL, OMAP54XX_OPTFCLKEN_DBCLK_SHIFT,
+		0x0, NULL);
+
+DEFINE_CLK_GATE(gpio7_dbclk, "sys_32k_ck", &sys_32k_ck, 0x0,
+		OMAP54XX_CM_L4PER_GPIO7_CLKCTRL, OMAP54XX_OPTFCLKEN_DBCLK_SHIFT,
+		0x0, NULL);
+
+DEFINE_CLK_GATE(gpio8_dbclk, "sys_32k_ck", &sys_32k_ck, 0x0,
+		OMAP54XX_CM_L4PER_GPIO8_CLKCTRL, OMAP54XX_OPTFCLKEN_DBCLK_SHIFT,
+		0x0, NULL);
+
+DEFINE_CLK_GATE(iss_ctrlclk, "func_96m_fclk", &func_96m_fclk, 0x0,
+		OMAP54XX_CM_CAM_ISS_CLKCTRL, OMAP54XX_OPTFCLKEN_CTRLCLK_SHIFT,
+		0x0, NULL);
+
+DEFINE_CLK_GATE(lli_txphy_clk, "dpll_unipro1_clkdcoldo",
+		&dpll_unipro1_clkdcoldo, 0x0, OMAP54XX_CM_MIPIEXT_LLI_CLKCTRL,
+		OMAP54XX_OPTFCLKEN_TXPHY_CLK_SHIFT, 0x0, NULL);
+
+DEFINE_CLK_GATE(lli_txphy_ls_clk, "dpll_unipro1_m2_ck", &dpll_unipro1_m2_ck,
+		0x0, OMAP54XX_CM_MIPIEXT_LLI_CLKCTRL,
+		OMAP54XX_OPTFCLKEN_TXPHY_LS_CLK_SHIFT, 0x0, NULL);
+
+DEFINE_CLK_GATE(mmc1_32khz_clk, "sys_32k_ck", &sys_32k_ck, 0x0,
+		OMAP54XX_CM_L3INIT_MMC1_CLKCTRL,
+		OMAP54XX_OPTFCLKEN_32KHZ_CLK_8_8_SHIFT, 0x0, NULL);
+
+DEFINE_CLK_GATE(sata_ref_clk, "sys_clkin", &sys_clkin, 0x0,
+		OMAP54XX_CM_L3INIT_SATA_CLKCTRL,
+		OMAP54XX_OPTFCLKEN_REF_CLK_SHIFT, 0x0, NULL);
+
+DEFINE_CLK_GATE(slimbus1_slimbus_clk, "slimbus_clk", &slimbus_clk, 0x0,
+		OMAP54XX_CM_ABE_SLIMBUS1_CLKCTRL,
+		OMAP54XX_OPTFCLKEN_SLIMBUS_CLK_SHIFT, 0x0, NULL);
+
+DEFINE_CLK_GATE(usb_host_hs_hsic480m_p1_clk, "dpll_usb_m2_ck", &dpll_usb_m2_ck,
+		0x0, OMAP54XX_CM_L3INIT_USB_HOST_HS_CLKCTRL,
+		OMAP54XX_OPTFCLKEN_HSIC480M_P1_CLK_SHIFT, 0x0, NULL);
+
+DEFINE_CLK_GATE(usb_host_hs_hsic480m_p2_clk, "dpll_usb_m2_ck", &dpll_usb_m2_ck,
+		0x0, OMAP54XX_CM_L3INIT_USB_HOST_HS_CLKCTRL,
+		OMAP54XX_OPTFCLKEN_HSIC480M_P2_CLK_SHIFT, 0x0, NULL);
+
+DEFINE_CLK_GATE(usb_host_hs_hsic480m_p3_clk, "dpll_usb_m2_ck", &dpll_usb_m2_ck,
+		0x0, OMAP54XX_CM_L3INIT_USB_HOST_HS_CLKCTRL,
+		OMAP54XX_OPTFCLKEN_HSIC480M_P3_CLK_SHIFT, 0x0, NULL);
+
+DEFINE_CLK_GATE(usb_host_hs_hsic60m_p1_clk, "l3init_60m_fclk", &l3init_60m_fclk,
+		0x0, OMAP54XX_CM_L3INIT_USB_HOST_HS_CLKCTRL,
+		OMAP54XX_OPTFCLKEN_HSIC60M_P1_CLK_SHIFT, 0x0, NULL);
+
+DEFINE_CLK_GATE(usb_host_hs_hsic60m_p2_clk, "l3init_60m_fclk", &l3init_60m_fclk,
+		0x0, OMAP54XX_CM_L3INIT_USB_HOST_HS_CLKCTRL,
+		OMAP54XX_OPTFCLKEN_HSIC60M_P2_CLK_SHIFT, 0x0, NULL);
+
+DEFINE_CLK_GATE(usb_host_hs_hsic60m_p3_clk, "l3init_60m_fclk", &l3init_60m_fclk,
+		0x0, OMAP54XX_CM_L3INIT_USB_HOST_HS_CLKCTRL,
+		OMAP54XX_OPTFCLKEN_HSIC60M_P3_CLK_SHIFT, 0x0, NULL);
 
 static const char *utmi_p1_gfclk_parents[] = {
 	"l3init_60m_fclk", "xclk60mhsp1",
@@ -1187,23 +900,9 @@ DEFINE_CLK_MUX(utmi_p1_gfclk, utmi_p1_gfclk_parents, NULL, 0x0,
 	       OMAP54XX_CLKSEL_UTMI_P1_SHIFT, OMAP54XX_CLKSEL_UTMI_P1_WIDTH,
 	       0x0, NULL);
 
-static const char *usb_host_hs_utmi_p1_clk_parents[] = {
-	"utmi_p1_gfclk",
-};
-
-static struct clk usb_host_hs_utmi_p1_clk;
-
-static struct clk_hw_omap usb_host_hs_utmi_p1_clk_hw = {
-	.hw = {
-		.clk = &usb_host_hs_utmi_p1_clk,
-	},
-	.clkdm_name	= "l3init_clkdm",
-	.enable_reg	= OMAP54XX_CM_L3INIT_USB_HOST_HS_CLKCTRL,
-	.enable_bit	= OMAP54XX_OPTFCLKEN_UTMI_P1_CLK_SHIFT,
-};
-
-DEFINE_STRUCT_CLK(usb_host_hs_utmi_p1_clk, usb_host_hs_utmi_p1_clk_parents,
-		  dss_32khz_clk_ops);
+DEFINE_CLK_GATE(usb_host_hs_utmi_p1_clk, "utmi_p1_gfclk", &utmi_p1_gfclk, 0x0,
+		OMAP54XX_CM_L3INIT_USB_HOST_HS_CLKCTRL,
+		OMAP54XX_OPTFCLKEN_UTMI_P1_CLK_SHIFT, 0x0, NULL);
 
 static const char *utmi_p2_gfclk_parents[] = {
 	"l3init_60m_fclk", "xclk60mhsp2",
@@ -1214,110 +913,33 @@ DEFINE_CLK_MUX(utmi_p2_gfclk, utmi_p2_gfclk_parents, NULL, 0x0,
 	       OMAP54XX_CLKSEL_UTMI_P2_SHIFT, OMAP54XX_CLKSEL_UTMI_P2_WIDTH,
 	       0x0, NULL);
 
-static const char *usb_host_hs_utmi_p2_clk_parents[] = {
-	"utmi_p2_gfclk",
-};
+DEFINE_CLK_GATE(usb_host_hs_utmi_p2_clk, "utmi_p2_gfclk", &utmi_p2_gfclk, 0x0,
+		OMAP54XX_CM_L3INIT_USB_HOST_HS_CLKCTRL,
+		OMAP54XX_OPTFCLKEN_UTMI_P2_CLK_SHIFT, 0x0, NULL);
 
-static struct clk usb_host_hs_utmi_p2_clk;
+DEFINE_CLK_GATE(usb_host_hs_utmi_p3_clk, "l3init_60m_fclk", &l3init_60m_fclk,
+		0x0, OMAP54XX_CM_L3INIT_USB_HOST_HS_CLKCTRL,
+		OMAP54XX_OPTFCLKEN_UTMI_P3_CLK_SHIFT, 0x0, NULL);
 
-static struct clk_hw_omap usb_host_hs_utmi_p2_clk_hw = {
-	.hw = {
-		.clk = &usb_host_hs_utmi_p2_clk,
-	},
-	.clkdm_name	= "l3init_clkdm",
-	.enable_reg	= OMAP54XX_CM_L3INIT_USB_HOST_HS_CLKCTRL,
-	.enable_bit	= OMAP54XX_OPTFCLKEN_UTMI_P2_CLK_SHIFT,
-};
+DEFINE_CLK_GATE(usb_otg_ss_refclk960m, "dpll_usb_clkdcoldo",
+		&dpll_usb_clkdcoldo, 0x0, OMAP54XX_CM_L3INIT_USB_OTG_SS_CLKCTRL,
+		OMAP54XX_OPTFCLKEN_REFCLK960M_SHIFT, 0x0, NULL);
 
-DEFINE_STRUCT_CLK(usb_host_hs_utmi_p2_clk, usb_host_hs_utmi_p2_clk_parents,
-		  dss_32khz_clk_ops);
+DEFINE_CLK_GATE(usb_phy_cm_clk32k, "sys_32k_ck", &sys_32k_ck, 0x0,
+		OMAP54XX_CM_COREAON_USB_PHY_CORE_CLKCTRL,
+		OMAP54XX_OPTFCLKEN_CLK32K_SHIFT, 0x0, NULL);
 
-static struct clk usb_host_hs_utmi_p3_clk;
+DEFINE_CLK_GATE(usb_tll_hs_usb_ch0_clk, "l3init_60m_fclk", &l3init_60m_fclk,
+		0x0, OMAP54XX_CM_L3INIT_USB_TLL_HS_CLKCTRL,
+		OMAP54XX_OPTFCLKEN_USB_CH0_CLK_SHIFT, 0x0, NULL);
 
-static struct clk_hw_omap usb_host_hs_utmi_p3_clk_hw = {
-	.hw = {
-		.clk = &usb_host_hs_utmi_p3_clk,
-	},
-	.clkdm_name	= "l3init_clkdm",
-	.enable_reg	= OMAP54XX_CM_L3INIT_USB_HOST_HS_CLKCTRL,
-	.enable_bit	= OMAP54XX_OPTFCLKEN_UTMI_P3_CLK_SHIFT,
-};
+DEFINE_CLK_GATE(usb_tll_hs_usb_ch1_clk, "l3init_60m_fclk", &l3init_60m_fclk,
+		0x0, OMAP54XX_CM_L3INIT_USB_TLL_HS_CLKCTRL,
+		OMAP54XX_OPTFCLKEN_USB_CH1_CLK_SHIFT, 0x0, NULL);
 
-DEFINE_STRUCT_CLK(usb_host_hs_utmi_p3_clk, usb_host_hs_hsic60m_p1_clk_parents,
-		  dss_32khz_clk_ops);
-
-static const char *usb_otg_ss_refclk960m_parents[] = {
-	"dpll_usb_clkdcoldo",
-};
-
-static struct clk usb_otg_ss_refclk960m;
-
-static struct clk_hw_omap usb_otg_ss_refclk960m_hw = {
-	.hw = {
-		.clk = &usb_otg_ss_refclk960m,
-	},
-	.clkdm_name	= "l3init_clkdm",
-	.enable_reg	= OMAP54XX_CM_L3INIT_USB_OTG_SS_CLKCTRL,
-	.enable_bit	= OMAP54XX_OPTFCLKEN_REFCLK960M_SHIFT,
-};
-
-DEFINE_STRUCT_CLK(usb_otg_ss_refclk960m, usb_otg_ss_refclk960m_parents,
-		  dss_32khz_clk_ops);
-
-static struct clk usb_phy_cm_clk32k;
-
-static struct clk_hw_omap usb_phy_cm_clk32k_hw = {
-	.hw = {
-		.clk = &usb_phy_cm_clk32k,
-	},
-	.clkdm_name	= "coreaon_clkdm",
-	.enable_reg	= OMAP54XX_CM_COREAON_USB_PHY_CORE_CLKCTRL,
-	.enable_bit	= OMAP54XX_OPTFCLKEN_CLK32K_SHIFT,
-};
-
-DEFINE_STRUCT_CLK(usb_phy_cm_clk32k, dss_32khz_clk_parents, dss_32khz_clk_ops);
-
-static struct clk usb_tll_hs_usb_ch0_clk;
-
-static struct clk_hw_omap usb_tll_hs_usb_ch0_clk_hw = {
-	.hw = {
-		.clk = &usb_tll_hs_usb_ch0_clk,
-	},
-	.clkdm_name	= "l3init_clkdm",
-	.enable_reg	= OMAP54XX_CM_L3INIT_USB_TLL_HS_CLKCTRL,
-	.enable_bit	= OMAP54XX_OPTFCLKEN_USB_CH0_CLK_SHIFT,
-};
-
-DEFINE_STRUCT_CLK(usb_tll_hs_usb_ch0_clk, usb_host_hs_hsic60m_p1_clk_parents,
-		  dss_32khz_clk_ops);
-
-static struct clk usb_tll_hs_usb_ch1_clk;
-
-static struct clk_hw_omap usb_tll_hs_usb_ch1_clk_hw = {
-	.hw = {
-		.clk = &usb_tll_hs_usb_ch1_clk,
-	},
-	.clkdm_name	= "l3init_clkdm",
-	.enable_reg	= OMAP54XX_CM_L3INIT_USB_TLL_HS_CLKCTRL,
-	.enable_bit	= OMAP54XX_OPTFCLKEN_USB_CH1_CLK_SHIFT,
-};
-
-DEFINE_STRUCT_CLK(usb_tll_hs_usb_ch1_clk, usb_host_hs_hsic60m_p1_clk_parents,
-		  dss_32khz_clk_ops);
-
-static struct clk usb_tll_hs_usb_ch2_clk;
-
-static struct clk_hw_omap usb_tll_hs_usb_ch2_clk_hw = {
-	.hw = {
-		.clk = &usb_tll_hs_usb_ch2_clk,
-	},
-	.clkdm_name	= "l3init_clkdm",
-	.enable_reg	= OMAP54XX_CM_L3INIT_USB_TLL_HS_CLKCTRL,
-	.enable_bit	= OMAP54XX_OPTFCLKEN_USB_CH2_CLK_SHIFT,
-};
-
-DEFINE_STRUCT_CLK(usb_tll_hs_usb_ch2_clk, usb_host_hs_hsic60m_p1_clk_parents,
-		  dss_32khz_clk_ops);
+DEFINE_CLK_GATE(usb_tll_hs_usb_ch2_clk, "l3init_60m_fclk", &l3init_60m_fclk,
+		0x0, OMAP54XX_CM_L3INIT_USB_TLL_HS_CLKCTRL,
+		OMAP54XX_OPTFCLKEN_USB_CH2_CLK_SHIFT, 0x0, NULL);
 
 /* Remaining optional clocks */
 DEFINE_CLK_DIVIDER(aess_fclk, "abe_clk", &abe_clk, 0x0,
@@ -1494,7 +1116,7 @@ static const struct clksel auxclk_src_sel[] = {
 };
 
 static const char *auxclk_src_ck_parents[] = {
-	"sys_clkin", "dpll_core_m3x2_ck", "dpll_per_m3x2_ck",
+	"sys_clkin_ck", "dpll_core_m3x2_ck", "dpll_per_m3x2_ck",
 };
 
 static const struct clk_ops auxclk_src_ck_ops = {
@@ -1671,9 +1293,7 @@ static struct omap_clk omap54xx_clks[] = {
 	CLK(NULL,	"usb_host_hs_hsic60m_p1_clk",	&usb_host_hs_hsic60m_p1_clk,	CK_54XX),
 	CLK(NULL,	"usb_host_hs_hsic60m_p2_clk",	&usb_host_hs_hsic60m_p2_clk,	CK_54XX),
 	CLK(NULL,	"usb_host_hs_hsic60m_p3_clk",	&usb_host_hs_hsic60m_p3_clk,	CK_54XX),
-	CLK(NULL,	"utmi_p1_gfclk",		&utmi_p1_gfclk,	CK_54XX),
 	CLK(NULL,	"usb_host_hs_utmi_p1_clk",	&usb_host_hs_utmi_p1_clk,	CK_54XX),
-	CLK(NULL,	"utmi_p2_gfclk",		&utmi_p2_gfclk,	CK_54XX),
 	CLK(NULL,	"usb_host_hs_utmi_p2_clk",	&usb_host_hs_utmi_p2_clk,	CK_54XX),
 	CLK(NULL,	"usb_host_hs_utmi_p3_clk",	&usb_host_hs_utmi_p3_clk,	CK_54XX),
 	CLK(NULL,	"usb_otg_ss_refclk960m",	&usb_otg_ss_refclk960m,	CK_54XX),
@@ -1711,6 +1331,8 @@ static struct omap_clk omap54xx_clks[] = {
 	CLK(NULL,	"timer7_gfclk_mux",		&timer7_gfclk_mux,	CK_54XX),
 	CLK(NULL,	"timer8_gfclk_mux",		&timer8_gfclk_mux,	CK_54XX),
 	CLK(NULL,	"timer9_gfclk_mux",		&timer9_gfclk_mux,	CK_54XX),
+	CLK(NULL,	"utmi_p1_gfclk",		&utmi_p1_gfclk,	CK_54XX),
+	CLK(NULL,	"utmi_p2_gfclk",		&utmi_p2_gfclk,	CK_54XX),
 	CLK(NULL,	"auxclk0_src_ck",		&auxclk0_src_ck,	CK_54XX),
 	CLK(NULL,	"auxclk0_ck",			&auxclk0_ck,	CK_54XX),
 	CLK(NULL,	"auxclkreq0_ck",		&auxclkreq0_ck,	CK_54XX),

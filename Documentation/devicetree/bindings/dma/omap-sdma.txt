@@ -1,0 +1,44 @@
+* TI OMAP SDMA controller
+
+Required properties:
+- compatible: 		Must be "ti,omap-sdma"
+- reg: 			Contains DMA registers location and length.
+- interrupts: 		Contains DMA interrupt information.
+- #dma-cells: 		Must be 1.
+- #dma-channels:	Contains total number of programmable DMA channels.
+- #dma-requests:	Contains total number of DMA requests.
+
+Example:
+
+	sdma: dma-controller@4A056000 {
+		compatible = "ti,omap-sdma";
+		reg = <0x4A056000 0x1000>;
+		interrupts = <0 12 0x4>,
+			     <0 13 0x4>,
+			     <0 14 0x4>,
+			     <0 15 0x4>;
+		#dma-cells = <1>;
+		#dma-channels = <32>;
+		#dma-requests = <127>;
+	};
+
+
+* TI OMAP SDMA clients
+
+Required properties:
+- dmas:			List of one or more DMA specifiers, each consisting of
+			- A phandle pointing to DMA controller node
+			- The DMA request number associated with client device
+- dma-names: 		Contains one identifier string for each dma specifier in
+			the dmas property. The specific strings that can be used
+			are defined in the binding of the DMA client device.
+
+Example:
+
+	mmc1: mmc@4809c000 {
+		...
+		dmas = <&sdma 61>,	/* TX channel */
+		       <&sdma 62>;	/* RX channel */
+		dma-names = "tx", "rx";
+		...
+	};

@@ -18,6 +18,9 @@
 /include/ "skeleton.dtsi"
 
 / {
+	#address-cells = <1>;
+	#size-cells = <1>;
+
 	compatible = "ti,omap5";
 	interrupt-parent = <&gic>;
 
@@ -33,22 +36,30 @@
 	cpus {
 		cpu@0 {
 			compatible = "arm,cortex-a15";
-			timer {
-				compatible = "arm,armv7-timer";
-				/* 14th PPI IRQ, active low level-sensitive */
-				interrupts = <1 14 0x308>;
-				clock-frequency = <6144000>;
-			};
 		};
 		cpu@1 {
 			compatible = "arm,cortex-a15";
-			timer {
-				compatible = "arm,armv7-timer";
-				/* 14th PPI IRQ, active low level-sensitive */
-				interrupts = <1 14 0x308>;
-				clock-frequency = <6144000>;
-			};
 		};
+	};
+
+	timer {
+		compatible = "arm,armv7-timer";
+		/* PPI secure/nonsecure IRQ, active low level-sensitive */
+		interrupts = <1 13 0x308>,
+			     <1 14 0x308>,
+			     <1 11 0x308>,
+			     <1 10 0x308>;
+		clock-frequency = <6144000>;
+	};
+
+	gic: interrupt-controller@48211000 {
+		compatible = "arm,cortex-a15-gic";
+		interrupt-controller;
+		#interrupt-cells = <3>;
+		reg = <0x48211000 0x1000>,
+		      <0x48212000 0x1000>,
+		      <0x48214000 0x2000>,
+		      <0x48216000 0x2000>;
 	};
 
 	/*
@@ -71,11 +82,20 @@
 	 * hierarchy.
 	 */
 	ocp {
-		compatible = "ti,omap4-l3-noc", "simple-bus";
+		compatible = "simple-bus";
 		#address-cells = <1>;
 		#size-cells = <1>;
 		ranges;
-		ti,hwmods = "l3_main_1", "l3_main_2", "l3_main_3";
+
+		l3_noc: l3_noc@44000000 {
+			compatible = "ti,omap4-l3-noc";
+			ti,hwmods = "l3_main_1", "l3_main_2", "l3_main_3";
+			reg = <0x44000000 0x2000>,
+			      <0x44800000 0x3000>,
+			      <0x45000000 0x4000>;
+			interrupts = <0 41 0x4>,
+				     <0 42 0x4>;
+		};
 
 		counter32k: counter@4ae04000 {
 			compatible = "ti,omap-counter32k";
@@ -98,14 +118,6 @@
 			#size-cells = <0>;
 			pinctrl-single,register-width = <16>;
 			pinctrl-single,function-mask = <0x7fff>;
-		};
-
-		gic: interrupt-controller@48211000 {
-			compatible = "arm,cortex-a15-gic";
-			interrupt-controller;
-			#interrupt-cells = <3>;
-			reg = <0x48211000 0x1000>,
-			      <0x48212000 0x1000>;
 		};
 
 		sdma: dma-controller@4A056000 {
@@ -354,6 +366,7 @@
 
 		keypad: keypad@4ae1c000 {
 			compatible = "ti,omap4-keypad";
+			reg = <0x4ae1c000 0x400>;
 			ti,hwmods = "kbd";
 		};
 
@@ -497,6 +510,13 @@
 			ti,timer-pwm;
 		};
 
+		wdt2: wdt@4ae14000 {
+			compatible = "ti,omap5-wdt", "ti,omap3-wdt";
+			reg = <0x4ae14000 0x80>;
+			interrupts = <0 80 0x4>;
+			ti,hwmods = "wd_timer2";
+		};
+
 		emif1: emif@0x4c000000 {
 			compatible	= "ti,emif-4d5";
 			ti,hwmods	= "emif1";
@@ -517,6 +537,264 @@
 			hw-caps-read-idle-ctrl;
 			hw-caps-ll-interface;
 			hw-caps-temp-alert;
+		};
+
+		/*
+		 * FIXME: Update compatible and status when dt support
+		 * gets added for below devices. For now all below DT device
+		 * data is used only for initializing the IPs in hwmod.
+		 */
+
+		abe_aess: abe_aess@401f1000 {
+			compatible = "simple-bus";
+			status = "disabled";
+			reg = <0x44800000 0x400>;
+			ti,hwmods = "aess";
+		};
+
+		c2c: c2c@5c000000 {
+			compatible = "simple-bus";
+			status = "disabled";
+			reg = <0x5c000000 0x100>;
+			ti,hwmods = "c2c";
+		};
+
+		dss: dss@58000000 {
+			compatible = "simple-bus";
+			status = "disabled";
+			reg = <0x58000000 0x80>;
+			ti,hwmods = "dss_core";
+		};
+
+		dss_dispc: dss_dispc@58001000 {
+			compatible = "simple-bus";
+			status = "disabled";
+			reg = <0x58001000 0x1000>;
+			ti,hwmods = "dss_dispc";
+		};
+
+		dss_dsi1_a: dss_dsi1_a@58004000 {
+			compatible = "simple-bus";
+			status = "disabled";
+			reg = <0x58004000 0x200>;
+			ti,hwmods = "dss_dsi1_a";
+		};
+
+		dss_dsi1_b: dss_dsi1_b@58005000 {
+			compatible = "simple-bus";
+			status = "disabled";
+			reg = <0x58005000 0x200>;
+			ti,hwmods = "dss_dsi1_b";
+		};
+
+		dss_dsi1_c: dss_dsi1_c@58009000 {
+			compatible = "simple-bus";
+			status = "disabled";
+			reg = <0x58009000 0x200>;
+			ti,hwmods = "dss_dsi1_c";
+		};
+
+		dss_hdmi: dss_hdmi@58060000 {
+			compatible = "simple-bus";
+			status = "disabled";
+			reg = <0x58060000 0x19000>;
+			ti,hwmods = "dss_hdmi";
+		};
+
+		dss_rfbi: dss_rfbi@580020000 {
+			compatible = "simple-bus";
+			status = "disabled";
+			reg = <0x58002000 0x100>;
+			ti,hwmods = "dss_rfbi";
+		};
+
+		elm: elm@48078000 {
+			compatible = "simple-bus";
+			status = "disabled";
+			reg = <0x48078000 0x1000>;
+			ti,hwmods = "elm";
+		};
+
+		fdif: fdif@4a10a000 {
+			compatible = "simple-bus";
+			status = "disabled";
+			reg = <0x4a10a000 0x200>;
+			ti,hwmods = "fdif";
+		};
+
+		gpmc: gpmc@50000000 {
+			compatible = "simple-bus";
+			status = "disabled";
+			reg = <0x50000000 0x400>;
+			ti,hwmods = "gpmc";
+		};
+
+		gpu: gpu@5600fe00 {
+			compatible = "simple-bus";
+			status = "disabled";
+			reg = <0x5600fe00 0x2000>;
+			ti,hwmods = "gpu";
+		};
+
+		hdq1w: hdq1w@480b2000 {
+			compatible = "simple-bus";
+			status = "disabled";
+			reg = <0x480b2000 0x20>;
+			ti,hwmods = "hdq1w";
+		};
+
+		hsi: hsi@4a05a000 {
+			compatible = "simple-bus";
+			status = "disabled";
+			reg = <0x4a05a000 0x2000>;
+			ti,hwmods = "hsi";
+		};
+
+		ipu: ipu@55082000 {
+			compatible = "simple-bus";
+			status = "disabled";
+			reg = <0x55082000 0x100>;
+			ti,hwmods = "ipu";
+		};
+
+		mmu_ipu: mmu_ipu@55080800 {
+			compatible = "simple-bus";
+			status = "disabled";
+			reg = <0x55080800 0x1000>;
+			ti,hwmods = "mmu_ipu";
+		};
+
+		iss: iss@52000000 {
+			compatible = "simple-bus";
+			status = "disabled";
+			reg = <0x52000000 0x20>;
+			ti,hwmods = "iss";
+		};
+
+		iva: iva@5a05a400 {
+			compatible = "simple-bus";
+			status = "disabled";
+			reg = <0x5a05a400 0x80>;
+			ti,hwmods = "iva";
+		};
+
+		mailbox: mailbox@4a0f4000 {
+			compatible = "simple-bus";
+			status = "disabled";
+			reg = <0x4a0f4000 0x200>;
+			ti,hwmods = "mailbox";
+		};
+
+		mcasp: mcasp@40128000 {
+			compatible = "simple-bus";
+			status = "disabled";
+			reg = <0x40128000 0x400>;
+			ti,hwmods = "mcasp";
+		};
+
+		mcspi1: mcspi1@48098000 {
+			compatible = "simple-bus";
+			status = "disabled";
+			reg = <0x48098000 0x200>;
+			ti,hwmods = "mcspi1";
+		};
+
+		mcspi2: mcspi2@4809a000 {
+			compatible = "simple-bus";
+			status = "disabled";
+			reg = <0x4809a000 0x200>;
+			ti,hwmods = "mcspi2";
+		};
+
+		mcspi3: mcspi3@480b8000 {
+			compatible = "simple-bus";
+			status = "disabled";
+			reg = <0x480b8000 0x200>;
+			ti,hwmods = "mcspi3";
+		};
+
+		mcspi4: mcspi4@480ba000 {
+			compatible = "simple-bus";
+			status = "disabled";
+			reg = <0x480ba000 0x200>;
+			ti,hwmods = "mcspi4";
+		};
+
+		ocp2scp1: ocp2scp1@4a080000 {
+			compatible = "simple-bus";
+			status = "disabled";
+			reg = <0x4a080000 0x20>;
+			ti,hwmods = "ocp2scp1";
+		};
+
+		sata: sata@4a141100 {
+			compatible = "simple-bus";
+			status = "disabled";
+			reg = <0x4a141100 0x08>;
+			ti,hwmods = "sata";
+		};
+
+		scrm: scrm@4ae0a000 {
+			compatible = "simple-bus";
+			status = "disabled";
+			reg = <0x4ae0a000 0x800>;
+			ti,hwmods = "scrm";
+		};
+
+		slimbus1: slimbus1@4012c000 {
+			compatible = "simple-bus";
+			status = "disabled";
+			reg = <0x4012c000 0x400>;
+			ti,hwmods = "slimbus1";
+		};
+
+		smartreflex_core: smartreflex_core@4a0dd000 {
+			compatible = "simple-bus";
+			status = "disabled";
+			reg = <0x4a0dd000 0x40>;
+			ti,hwmods = "smartreflex_core";
+		};
+
+		smartreflex_mm: smartreflex_mm@4a0db000 {
+			compatible = "simple-bus";
+			status = "disabled";
+			reg = <0x4a0db000 0x40>;
+			ti,hwmods = "smartreflex_mm";
+		};
+
+		smartreflex_mpu: smartreflex_mpu@4a0d9000 {
+			compatible = "simple-bus";
+			status = "disabled";
+			reg = <0x4a0d9000 0x40>;
+			ti,hwmods = "smartreflex_mpu";
+		};
+
+		spinlock: spinlock@4a0f6000 {
+			compatible = "simple-bus";
+			status = "disabled";
+			reg = <0x4a0f6000 0x1000>;
+			ti,hwmods = "spinlock";
+		};
+
+		usb_host_hs: usb_host_hs@4a064c00 {
+			compatible = "simple-bus";
+			status = "disabled";
+			reg = <0x4a064c00 0x100>;
+			ti,hwmods = "usb_host_hs";
+		};
+
+		usb_otg_ss: usb_otg_ss@4a030000 {
+			compatible = "simple-bus";
+			status = "disabled";
+			reg = <0x4a030000 0x100>;
+			ti,hwmods = "usb_otg_ss";
+		};
+
+		usb_tll_hs: usb_tll_hs@4a062800 {
+			compatible = "simple-bus";
+			status = "disabled";
+			reg = <0x4a062800 0x400>;
+			ti,hwmods = "usb_tll_hs";
 		};
 	};
 };

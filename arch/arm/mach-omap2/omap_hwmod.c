@@ -138,6 +138,7 @@
 #include <linux/spinlock.h>
 #include <linux/slab.h>
 #include <linux/bootmem.h>
+#include <linux/of.h>
 
 #include "clock.h"
 #include "omap_hwmod.h"
@@ -2274,6 +2275,29 @@ static int _shutdown(struct omap_hwmod *oh)
 	return 0;
 }
 
+/*
+ * Helper function to recursively find the matching hwmod device node for
+ * hierarchical DT blob
+ */
+static struct device_node *of_dev_hwmod_lookup(struct device_node *np,
+							struct omap_hwmod *oh)
+{
+	struct device_node *np0 = NULL, *np1 = NULL;
+	const char *p;
+
+	for_each_child_of_node(np, np0) {
+		if (of_find_property(np0, "ti,hwmods", NULL)) {
+			p = of_get_property(np0, "ti,hwmods", NULL);
+			if (!strcmp(p, oh->name))
+				return np0;
+			np1 = of_dev_hwmod_lookup(np0, oh);
+			if (np1)
+				return np1;
+		}
+	}
+	return NULL;
+}
+
 /**
  * _init_mpu_rt_base - populate the virtual address for a hwmod
  * @oh: struct omap_hwmod * to locate the virtual address
@@ -2287,6 +2311,9 @@ static void __init _init_mpu_rt_base(struct omap_hwmod *oh, void *data)
 {
 	struct omap_hwmod_addr_space *mem;
 	void __iomem *va_start;
+	struct device_node *np;
+	const void *reg_prop;
+	unsigned long start = 0, size = 0;
 
 	if (!oh)
 		return;
@@ -2300,10 +2327,28 @@ static void __init _init_mpu_rt_base(struct omap_hwmod *oh, void *data)
 	if (!mem) {
 		pr_debug("omap_hwmod: %s: no MPU register target found\n",
 			 oh->name);
+
+		/* Extract the IO space from device tree blob */
+		if (!of_have_populated_dt())
+			return;
+
+		np = of_dev_hwmod_lookup(of_find_node_by_name(NULL, "ocp"), oh);
+		if (np) {
+			reg_prop = of_get_property(np, "reg", NULL);
+			start = of_read_number(reg_prop, 1);
+			size = of_read_number(reg_prop + 4, 1);
+		}
+	} else {
+		start = mem->pa_start;
+		size = mem->pa_end - mem->pa_start;
+	}
+
+	if (!start) {
+		pr_debug("omap_hwmod: %s: no Address space found\n", oh->name);
 		return;
 	}
 
-	va_start = ioremap(mem->pa_start, mem->pa_end - mem->pa_start);
+	va_start = ioremap(start, size);
 	if (!va_start) {
 		pr_err("omap_hwmod: %s: Could not ioremap\n", oh->name);
 		return;

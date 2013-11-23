@@ -22,6 +22,8 @@
 
 #include <asm-generic/sections.h>
 
+#include "internal.h"
+
 static struct memblock_region memblock_memory_init_regions[INIT_MEMBLOCK_REGIONS] __initdata_memblock;
 static struct memblock_region memblock_reserved_init_regions[INIT_MEMBLOCK_REGIONS] __initdata_memblock;
 
@@ -263,6 +265,19 @@ phys_addr_t __init_memblock get_allocated_memblock_reserved_regions_info(
 					phys_addr_t *addr)
 {
 	if (memblock.reserved.regions == memblock_reserved_init_regions)
+		return 0;
+
+	/*
+	 * Don't allow Nobootmem allocator to free reserved memory regions
+	 * array if
+	 *  - CONFIG_DEBUG_FS is enabled;
+	 *  - CONFIG_ARCH_DISCARD_MEMBLOCK is not enabled;
+	 *  - reserved memory regions array have been resized during boot.
+	 * Otherwise debug_fs entry "sys/kernel/debug/memblock/reserved"
+	 * will show garbage instead of state of memory reservations.
+	 */
+	if (IS_ENABLED(CONFIG_DEBUG_FS) &&
+	    !IS_ENABLED(CONFIG_ARCH_DISCARD_MEMBLOCK))
 		return 0;
 
 	*addr = __pa(memblock.reserved.regions);
@@ -643,7 +658,7 @@ int __init_memblock memblock_free(phys_addr_t base, phys_addr_t size)
 {
 	memblock_dbg("   memblock_free: [%#016llx-%#016llx] %pF\n",
 		     (unsigned long long)base,
-		     (unsigned long long)base + size,
+		     (unsigned long long)base + size - 1,
 		     (void *)_RET_IP_);
 
 	return __memblock_remove(&memblock.reserved, base, size);
@@ -655,7 +670,7 @@ int __init_memblock memblock_reserve(phys_addr_t base, phys_addr_t size)
 
 	memblock_dbg("memblock_reserve: [%#016llx-%#016llx] %pF\n",
 		     (unsigned long long)base,
-		     (unsigned long long)base + size,
+		     (unsigned long long)base + size - 1,
 		     (void *)_RET_IP_);
 
 	return memblock_add_region(_rgn, base, size, MAX_NUMNODES);
@@ -870,8 +885,8 @@ static phys_addr_t __init memblock_alloc_base_nid(phys_addr_t size,
 {
 	phys_addr_t found;
 
-	if (WARN_ON(!align))
-		align = __alignof__(long long);
+	if (!align)
+		align = SMP_CACHE_BYTES;
 
 	/* align @size to avoid excessive fragmentation on reserved array */
 	size = round_up(size, align);
@@ -920,6 +935,198 @@ phys_addr_t __init memblock_alloc_try_nid(phys_addr_t size, phys_addr_t align, i
 	return memblock_alloc_base(size, align, MEMBLOCK_ALLOC_ACCESSIBLE);
 }
 
+/**
+ * _memblock_virt_alloc_try_nid_nopanic - allocate boot memory block
+ * @size: size of memory block to be allocated in bytes
+ * @align: alignment of the region and block's size
+ * @from: the lower bound of the memory region from where the allocation
+ *	  is preferred (phys address)
+ * @max_addr: the upper bound of the memory region from where the allocation
+ *	      is preferred (phys address), or %BOOTMEM_ALLOC_ACCESSIBLE to
+ *	      allocate only from memory limited by memblock.current_limit value
+ * @nid: nid of the free area to find, %MAX_NUMNODES for any node
+ *
+ * The @from limit is dropped if it can not be satisfied and the allocation
+ * will fall back to memory below @from.
+ *
+ * Allocation may fall back to any node in the system if the specified node
+ * can not hold the requested memory.
+ *
+ * The phys address of allocated boot memory block is converted to virtual and
+ * allocated memory is reset to 0.
+ *
+ * In addition, function sets sets the min_count for allocated boot memory block
+ * to 0 so that it is never reported as leaks.
+ *
+ * RETURNS:
+ * Virtual address of allocated memory block on success, NULL on failure.
+ */
+static void * __init _memblock_virt_alloc_try_nid_nopanic(
+				phys_addr_t size, phys_addr_t align,
+				phys_addr_t from, phys_addr_t max_addr,
+				int nid)
+{
+	phys_addr_t alloc;
+	void *ptr;
+
+	if (WARN_ON_ONCE(slab_is_available())) {
+		if (nid == MAX_NUMNODES)
+			return kzalloc(size, GFP_NOWAIT);
+		else
+			return kzalloc_node(size, GFP_NOWAIT, nid);
+	}
+
+	if (!align)
+		align = SMP_CACHE_BYTES;
+
+	/* align @size to avoid excessive fragmentation on reserved array */
+	size = round_up(size, align);
+
+again:
+	alloc = memblock_find_in_range_node(from, max_addr, size, align, nid);
+	if (alloc)
+		goto done;
+
+	if (nid != MAX_NUMNODES) {
+		alloc = memblock_find_in_range_node(from, max_addr, size,
+						    align, MAX_NUMNODES);
+		if (alloc)
+			goto done;
+	}
+
+	if (from) {
+		from = 0;
+		goto again;
+	} else {
+		goto error;
+	}
+
+done:
+	memblock_reserve(alloc, size);
+	ptr = phys_to_virt(alloc);
+	memset(ptr, 0, size);
+
+	/*
+	 * The min_count is set to 0 so that bootmem allocated blocks
+	 * are never reported as leaks.
+	 */
+	kmemleak_alloc(ptr, size, 0, 0);
+
+	return ptr;
+
+error:
+	return NULL;
+}
+
+/**
+ * memblock_virt_alloc_try_nid_nopanic - allocate boot memory block
+ * @size: size of memory block to be allocated in bytes
+ * @align: alignment of the region and block's size
+ * @from: the lower bound of the memory region from where the allocation
+ *	  is preferred (phys address)
+ * @max_addr: the upper bound of the memory region from where the allocation
+ *	      is preferred (phys address), or %BOOTMEM_ALLOC_ACCESSIBLE to
+ *	      allocate only from memory limited by memblock.current_limit value
+ * @nid: nid of the free area to find, %MAX_NUMNODES for any node
+ *
+ * Public version of _memblock_virt_alloc_try_nid_nopanic() which provides
+ * additional debug information (including caller info), if enabled.
+ *
+ * RETURNS:
+ * Virtual address of allocated memory block on success, NULL on failure.
+ */
+void * __init memblock_virt_alloc_try_nid_nopanic(
+				phys_addr_t size, phys_addr_t align,
+				phys_addr_t from, phys_addr_t max_addr,
+				int nid)
+{
+	memblock_dbg("%s: %llu bytes align=0x%llx nid=%d from=0x%llx max_addr=0x%llx %pF\n",
+		     __func__, (u64)size, (u64)align, nid, (u64)from,
+		     (u64)max_addr, (void *)_RET_IP_);
+	return _memblock_virt_alloc_try_nid_nopanic(size,
+						align, from, max_addr, nid);
+}
+
+/**
+ * memblock_virt_alloc_try_nid - allocate boot memory block with panicking
+ * @size: size of memory block to be allocated in bytes
+ * @align: alignment of the region and block's size
+ * @from: the lower bound of the memory region from where the allocation
+ *	  is preferred (phys address)
+ * @max_addr: the upper bound of the memory region from where the allocation
+ *	      is preferred (phys address), or %BOOTMEM_ALLOC_ACCESSIBLE to
+ *	      allocate only from memory limited by memblock.current_limit value
+ * @nid: nid of the free area to find, %MAX_NUMNODES for any node
+ *
+ * Public panicking version of _memblock_virt_alloc_try_nid_nopanic()
+ * which provides debug information (including caller info), if enabled,
+ * and panics if the request can not be satisfied.
+ *
+ * RETURNS:
+ * Virtual address of allocated memory block on success, NULL on failure.
+ */
+void * __init memblock_virt_alloc_try_nid(
+			phys_addr_t size, phys_addr_t align,
+			phys_addr_t from, phys_addr_t max_addr,
+			int nid)
+{
+	void *ptr;
+
+	memblock_dbg("%s: %llu bytes align=0x%llx nid=%d from=0x%llx max_addr=0x%llx %pF\n",
+		     __func__, (u64)size, (u64)align, nid, (u64)from,
+		     (u64)max_addr, (void *)_RET_IP_);
+	ptr = _memblock_virt_alloc_try_nid_nopanic(size,
+					align, from, max_addr, nid);
+	if (ptr)
+		return ptr;
+
+	panic("%s: Failed to allocate %llu bytes align=0x%llx nid=%d from=0x%llx max_addr=0x%llx\n",
+	      __func__, (u64)size, (u64)align, nid, (u64)from, (u64)max_addr);
+	return NULL;
+}
+
+/**
+ * __memblock_free_early - free boot memory block
+ * @base: phys starting address of the  boot memory block
+ * @size: size of the boot memory block in bytes
+ *
+ * Free boot memory block previously allocated by memblock_virt_alloc_xx() API.
+ * The freeing memory will not be released to the buddy allocator.
+ */
+void __init __memblock_free_early(phys_addr_t base, phys_addr_t size)
+{
+	memblock_dbg("%s: [%#016llx-%#016llx] %pF\n",
+		     __func__, (u64)base, (u64)base + size - 1,
+		     (void *)_RET_IP_);
+	kmemleak_free_part(__va(base), size);
+	__memblock_remove(&memblock.reserved, base, size);
+}
+
+/*
+ * __memblock_free_late - free bootmem block pages directly to buddy allocator
+ * @addr: phys starting address of the  boot memory block
+ * @size: size of the boot memory block in bytes
+ *
+ * This is only useful when the bootmem allocator has already been torn
+ * down, but we are still initializing the system.  Pages are released directly
+ * to the buddy allocator, no bootmem metadata is updated because it is gone.
+ */
+void __init __memblock_free_late(phys_addr_t base, phys_addr_t size)
+{
+	u64 cursor, end;
+
+	memblock_dbg("%s: [%#016llx-%#016llx] %pF\n",
+		     __func__, (u64)base, (u64)base + size - 1,
+		     (void *)_RET_IP_);
+	kmemleak_free_part(__va(base), size);
+	cursor = PFN_UP(base);
+	end = PFN_DOWN(base + size);
+
+	for (; cursor < end; cursor++) {
+		__free_pages_bootmem(pfn_to_page(cursor), 0);
+		totalram_pages++;
+	}
+}
 
 /*
  * Remaining API functions

@@ -35,8 +35,6 @@ struct davinci_gpio_regs {
 struct davinci_gpio_controller {
 	struct gpio_chip	chip;
 	int			irq_base;
-	/* Serialize access to GPIO registers */
-	spinlock_t		lock;
 	void __iomem		*regs;
 	void __iomem		*set_data;
 	void __iomem		*clr_data;
@@ -90,11 +88,9 @@ static inline int __davinci_direction(struct gpio_chip *chip,
 {
 	struct davinci_gpio_controller *d = chip2controller(chip);
 	struct davinci_gpio_regs __iomem *g = d->regs;
-	unsigned long flags;
 	u32 temp;
 	u32 mask = 1 << offset;
 
-	spin_lock_irqsave(&d->lock, flags);
 	temp = readl(&g->dir);
 	if (out) {
 		temp &= ~mask;
@@ -103,7 +99,6 @@ static inline int __davinci_direction(struct gpio_chip *chip,
 		temp |= mask;
 	}
 	writel(temp, &g->dir);
-	spin_unlock_irqrestore(&d->lock, flags);
 
 	return 0;
 }
@@ -206,8 +201,6 @@ static int davinci_gpio_probe(struct platform_device *pdev)
 		chips[i].chip.ngpio = ngpio - base;
 		if (chips[i].chip.ngpio > 32)
 			chips[i].chip.ngpio = 32;
-
-		spin_lock_init(&chips[i].lock);
 
 		regs = gpio2regs(base);
 		chips[i].regs = regs;

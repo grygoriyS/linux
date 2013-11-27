@@ -28,6 +28,19 @@ struct tnetv107x_gpio_regs {
 	u32	enable[3];
 };
 
+struct davinci_gpio_controller {
+	struct gpio_chip	chip;
+	int			irq_base;
+	/* Serialize access to GPIO registers */
+	spinlock_t		lock;
+	void __iomem		*regs;
+	void __iomem		*set_data;
+	void __iomem		*clr_data;
+	void __iomem		*in_data;
+	int			gpio_unbanked;
+	unsigned		gpio_irq;
+};
+
 #define gpio_reg_index(gpio)	((gpio) >> 5)
 #define gpio_reg_bit(gpio)	BIT((gpio) & 0x1f)
 
@@ -199,8 +212,6 @@ static int __init tnetv107x_gpio_setup(void)
 		gpiochip_add(&ctlr->chip);
 	}
 
-	soc_info->gpio_ctlrs = chips;
-	soc_info->gpio_ctlrs_num = DIV_ROUND_UP(ngpio, 32);
 	return 0;
 }
 pure_initcall(tnetv107x_gpio_setup);

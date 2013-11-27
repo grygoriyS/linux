@@ -31,20 +31,6 @@ struct davinci_gpio_platform_data {
 	u32	intc_irq_num;
 };
 
-
-struct davinci_gpio_controller {
-	struct gpio_chip	chip;
-	int			irq_base;
-	/* Serialize access to GPIO registers */
-	spinlock_t		lock;
-	void __iomem		*regs;
-	void __iomem		*set_data;
-	void __iomem		*clr_data;
-	void __iomem		*in_data;
-	int			gpio_unbanked;
-	unsigned		gpio_irq;
-};
-
 /*
  * basic gpio routines
  */

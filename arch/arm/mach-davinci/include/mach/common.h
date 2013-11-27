@@ -36,8 +36,6 @@ struct davinci_timer_info {
 	unsigned int			clocksource_id;
 };
 
-struct davinci_gpio_controller;
-
 /*
  * SoC info passed into common davinci modules.
  *
@@ -70,8 +68,6 @@ struct davinci_soc_info {
 	unsigned			gpio_num;
 	unsigned			gpio_irq;
 	unsigned			gpio_unbanked;
-	struct davinci_gpio_controller	*gpio_ctlrs;
-	int				gpio_ctlrs_num;
 	struct emac_platform_data	*emac_pdata;
 	dma_addr_t			sram_dma;
 	unsigned			sram_len;

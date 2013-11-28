@@ -20,6 +20,9 @@
 #include <linux/platform_device.h>
 #include <linux/platform_data/gpio-davinci.h>
 #include <linux/irqchip/chained_irq.h>
+#include <linux/module.h>
+#include <linux/of.h>
+#include <linux/of_platform.h>
 
 struct davinci_gpio_regs {
 	u32	dir;
@@ -149,6 +152,40 @@ static void davinci_gpio_ctrl_irqen(struct device *dev, u32 bank)
 static int davinci_gpio_unbanked_irq_init(struct davinci_gpio_bank *chipb);
 static int davinci_gpio_banked_irq_init(struct davinci_gpio_bank *chipb);
 
+static struct davinci_gpio_bank_pdata *
+davinci_gpio_get_pdata(struct platform_device *pdev)
+{
+	struct device_node *dn = pdev->dev.of_node;
+	struct davinci_gpio_bank_pdata *bank_pdata;
+	int ret;
+	u32 val;
+
+	if (!IS_ENABLED(CONFIG_OF) || !pdev->dev.of_node)
+		return dev_get_platdata(&pdev->dev);
+
+	bank_pdata = devm_kzalloc(&pdev->dev, sizeof(*bank_pdata), GFP_KERNEL);
+	if (!bank_pdata) {
+		dev_err(&pdev->dev, "Memory allocation failed\n");
+		return NULL;
+	}
+
+	ret = of_property_read_u32(dn, "ti,ngpio", &val);
+	if (ret)
+		goto of_err;
+
+	bank_pdata->width = val;
+
+	ret = of_property_read_u32(dn, "ti,davinci-gpio-unbanked", &val);
+	if (!ret)
+		bank_pdata->gpio_unbanked = val;
+
+	return bank_pdata;
+
+of_err:
+	dev_err(&pdev->dev, "Populating pdata from DT failed: err %d\n", ret);
+	return NULL;
+}
+
 static int davinci_gpio_bank_probe(struct platform_device *pdev)
 {
 	struct davinci_gpio_bank *chipb;
@@ -162,7 +199,7 @@ static int davinci_gpio_bank_probe(struct platform_device *pdev)
 	 */
 	static int base;
 
-	bank_pdata = dev_get_platdata(dev);
+	bank_pdata = davinci_gpio_get_pdata(pdev);
 	if (!bank_pdata) {
 		dev_err(dev, "No platform data found\n");
 		return -EINVAL;
@@ -191,6 +228,9 @@ static int davinci_gpio_bank_probe(struct platform_device *pdev)
 	chipb->chip.set = davinci_gpio_set;
 	chipb->chip.ngpio = min_t(u32, bank_pdata->width, MAX_GPIO_PER_BANK);
 	chipb->chip.base = base;
+#ifdef CONFIG_OF_GPIO
+	chipb->chip.of_node = dev->of_node;
+#endif
 
 	base += chipb->chip.ngpio;
 
@@ -238,6 +278,9 @@ static int davinci_gpio_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, chipc);
 
 	dev_info(dev, "GPIO controller registered\n");
+
+	if (dev->of_node)
+		return of_platform_populate(dev->of_node, NULL, NULL, dev);
 
 	return 0;
 }
@@ -489,7 +532,8 @@ static int davinci_gpio_banked_irq_init(struct davinci_gpio_bank *chipb)
 		return -ENODEV;
 	}
 
-	irq_domain = irq_domain_add_legacy(NULL, chipb->chip.ngpio, irq, 0,
+	irq_domain = irq_domain_add_legacy(chipb->dev->of_node,
+					   chipb->chip.ngpio, irq, 0,
 					   &davinci_gpio_irq_ops, chipb);
 	if (!irq_domain) {
 		dev_err(chipb->dev, "Couldn't register an IRQ domain\n");
@@ -529,19 +573,37 @@ static int davinci_gpio_banked_irq_init(struct davinci_gpio_bank *chipb)
 	return 0;
 }
 
+
+#if IS_ENABLED(CONFIG_OF)
+static const struct of_device_id davinci_gpio_bank_ids[] = {
+	{ .compatible = "ti,davinci-gpio-bank", },
+	{ /* sentinel */ },
+};
+MODULE_DEVICE_TABLE(of, davinci_gpio_bank_ids);
+#endif
 static struct platform_driver davinci_gpio_bank_driver = {
 	.probe		= davinci_gpio_bank_probe,
 	.driver		= {
 		.name	= "davinci_gpio_bank",
 		.owner	= THIS_MODULE,
+		.of_match_table	= of_match_ptr(davinci_gpio_bank_ids),
 	},
 };
+
+#if IS_ENABLED(CONFIG_OF)
+static const struct of_device_id davinci_gpio_ids[] = {
+	{ .compatible = "ti,davinci-gpio", },
+	{ /* sentinel */ },
+};
+MODULE_DEVICE_TABLE(of, davinci_gpio_ids);
+#endif
 
 static struct platform_driver davinci_gpio_driver = {
 	.probe		= davinci_gpio_probe,
 	.driver		= {
 		.name	= "davinci_gpio",
 		.owner	= THIS_MODULE,
+		.of_match_table	= of_match_ptr(davinci_gpio_ids),
 	},
 };
 

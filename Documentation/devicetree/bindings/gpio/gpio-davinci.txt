@@ -1,0 +1,119 @@
+Davinci General-Purpose Input/Output (GPIO) peripheral bindings
+
+Davinci GPIO IP is composite device which has common Configuration
+registers and set GPIO bank blocks with up to 32 GPIO lines per each.
+Each GPIO line can be configured to generate irq. Two IRQ generation modes
+can be supported (depend on SoC): banked irqs, unbanked irqs.
+	banked irqs: one IRQ is assigned for 16 GPIO lines (up to 2 IRQ per bank)
+	unbanked irqs: one IRQ is directly mapped to one GPIO line
+				 (up to 32 IRQs only for bank 0)
+
+The Davinci GPIO IP represented in DT as subtree of devices where root
+node is GPIO controller and sub-nodes are GPIO banks.
+
+For references see User guide section on:
+http://www.ti.com/product/tms320dm365
+http://www.ti.com/product/tms320dm355
+http://www.ti.com/product/omap-l138
+
+
+Davinci GPIO controller
+
+Required Properties:
+- compatible: should be "ti,davinci-gpio"
+- reg:	Physical base address of the common Configuration registers and the
+		size of mapped memory.
+- #address-cells = <1>;
+- #size-cells = <1>;
+- ranges;
+
+Optional properties:
+- clocks:	phandle reference to the controller clock. Required only
+			if clock tree data present in device tree.
+			See clock-bindings.txt
+- clock-names:	clock name. It has to be "aemif". Required only if clock
+				tree data present in device tree, in another case don't
+				use it.
+				See clock-bindings.txt
+
+
+Davinci GPIO bank
+
+Required Properties:
+- compatible: should be "ti,davinci-gpio-bank"
+- reg:	Physical base address of GPIO bank registers and the
+		size of mapped memory.
+- gpio-controller:	Marks the device node as a gpio controller.
+					see Documentation/devicetree/bindings/gpio/gpio.txt
+- interrupt-parent:	phandle of the parent interrupt controller.
+- interrupts:	Array of GPIO interrupt number. Only banked or unbanked IRQs are
+				supported at a time.
+- ti,ngpio: The number of GPIO pins supported.
+
+Optional properties:
+- ti,davinci-gpio-unbanked:	The number of GPIOs that have an individual interrupt
+		 					line to processor. Unbanked GPIOs are unsupported if
+		 					not present.
+
+The GPIO bank also may acts as an interrupt controller if it's configured
+to use banked irqs . It uses the default two cells specifier as described in
+Documentation/devicetree/bindings/interrupt-controller/interrupts.txt.
+
+Example for http://www.ti.com/product/omap-l138:
+
+gpio-controller@1e26000 {
+	compatible = "ti,davinci-gpio";
+	gpio-controller;
+	reg = <0x226000 0x10>;
+	ranges;
+
+		gpio0: gpio-bank@1e26010 {
+			compatible = "ti,davinci-gpio-bank";
+			reg = <0x226010 0x28>;
+			interrupt-parent = <&intc>;
+			interrupts = <42 IRQ_TYPE_EDGE_BOTH 43 IRQ_TYPE_EDGE_BOTH>;
+			ti,ngpio = <32>;
+			interrupt-controller;
+			#interrupt-cells = <2>;
+		}
+
+		gpio1: gpio-bank@1e26038 {
+			compatible = "ti,davinci-gpio-bank";
+			reg = <0x226038 0x28>;
+			interrupt-parent = <&intc>;
+			interrupts = <44 IRQ_TYPE_EDGE_BOTH 45 IRQ_TYPE_EDGE_BOTH>;
+			ti,ngpio = <32>;
+			interrupt-controller;
+			#interrupt-cells = <2>;
+		}
+
+		gpio2: gpio-bank@1e26060 {
+			compatible = "ti,davinci-gpio-bank";
+			reg = <0x226060 0x28>;
+			interrupt-parent = <&intc>;
+			interrupts = <46 IRQ_TYPE_EDGE_BOTH 47 IRQ_TYPE_EDGE_BOTH>;
+			ti,ngpio = <32>;
+			interrupt-controller;
+			#interrupt-cells = <2>;
+		}
+
+		gpio3: gpio-bank@1e26088 {
+			compatible = "ti,davinci-gpio-bank";
+			reg = <0x226088 0x28>;
+			interrupt-parent = <&intc>;
+			interrupts = <48 IRQ_TYPE_EDGE_BOTH 49 IRQ_TYPE_EDGE_BOTH>;
+			ti,ngpio = <32>;
+			interrupt-controller;
+			#interrupt-cells = <2>;
+		}
+
+		gpio4: gpio-bank@1e260b0 {
+			compatible = "ti,davinci-gpio-bank";
+			reg = <0x2260b0 0x28>;
+			interrupt-parent = <&intc>;
+			interrupts = <50 IRQ_TYPE_EDGE_BOTH>;
+			ti,ngpio = <16>;
+			interrupt-controller;
+			#interrupt-cells = <2>;
+		}
+};

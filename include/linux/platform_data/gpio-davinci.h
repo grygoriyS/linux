@@ -31,6 +31,12 @@ struct davinci_gpio_platform_data {
 	u32	intc_irq_num;
 };
 
+struct davinci_gpio_bank_pdata {
+	u32	width;
+	u32	gpio_unbanked;
+	u32	intc_irq_num;
+};
+
 /*
  * basic gpio routines
  */

@@ -20,6 +20,7 @@
 #include <asm/mach/arch.h>
 #include <asm/mach/time.h>
 #include <asm/smp_plat.h>
+#include <linux/platform_data/gpio-davinci.h>
 
 #include "keystone.h"
 
@@ -28,6 +29,61 @@
 #define PLL_RESET				BIT(16)
 
 static void __iomem *keystone_rstctrl;
+
+static struct resource keystone_gpio_resources[] = {
+	{/* registers */
+		.start	= 0x0260BF00,
+		.end	= 0x0260BF0F,
+		.flags	= IORESOURCE_MEM,
+	}
+};
+
+static struct platform_device davinci_gpio_device = {
+	.name	= "davinci_gpio",
+	.id	= -1,
+	.num_resources		= ARRAY_SIZE(keystone_gpio_resources),
+	.resource		= keystone_gpio_resources,
+};
+
+static struct resource keystone_gpio_bank0_res[] = {
+	{/* registers */
+		.start  = 0x0260BF10,
+		.end    = 0x0260BFFF,
+		.flags  = IORESOURCE_MEM,
+	},
+	{/* interrupt */
+		.start  = 152,
+		.end    = 183,
+		.flags  = IORESOURCE_IRQ,
+	},
+};
+
+struct davinci_gpio_bank_pdata davinci_gpio_bank0_platform_data = {
+	.width = 32,
+	.gpio_unbanked = 32,
+};
+
+static struct platform_device davinci_gpio_bank0_device = {
+	.name   = "davinci_gpio_bank",
+	.id     = -1,
+	.dev = {
+		.platform_data	= &davinci_gpio_bank0_platform_data,
+	},
+	.num_resources		= ARRAY_SIZE(keystone_gpio_bank0_res),
+	.resource		= keystone_gpio_bank0_res,
+};
+
+int __init keystone_gpio_register(void)
+{
+	int ret;
+	ret = platform_device_register(&davinci_gpio_device);
+	if (ret)
+		return ret;
+
+	davinci_gpio_bank0_device.dev.parent = &davinci_gpio_device.dev;
+	return platform_device_register(&davinci_gpio_bank0_device);
+}
+
 
 static void __init keystone_init(void)
 {
@@ -42,6 +98,9 @@ static void __init keystone_init(void)
 		pr_warn("ti,keystone-reset iomap error\n");
 
 	keystone_pm_runtime_init();
+
+	keystone_gpio_register();
+
 	of_platform_populate(NULL, of_default_bus_match_table, NULL, NULL);
 }
 

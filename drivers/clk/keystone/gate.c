@@ -18,6 +18,7 @@
 #include <linux/of_address.h>
 #include <linux/of.h>
 #include <linux/module.h>
+#include <linux/clkdev.h>
 
 /* PSC register offsets */
 #define PTCMD			0x120
@@ -189,6 +190,8 @@ static struct clk *clk_register_psc(struct device *dev,
 	clk = clk_register(NULL, &psc->hw);
 	if (IS_ERR(clk))
 		kfree(psc);
+
+	clk_register_clkdev(clk, name, NULL);
 
 	return clk;
 }

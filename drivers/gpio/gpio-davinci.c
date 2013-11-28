@@ -16,6 +16,7 @@
 #include <linux/err.h>
 #include <linux/io.h>
 #include <linux/irq.h>
+#include <linux/irqdomain.h>
 #include <linux/platform_device.h>
 #include <linux/platform_data/gpio-davinci.h>
 
@@ -43,7 +44,7 @@ struct davinci_gpio_bank {
 	void __iomem		*reg_base;
 	u32			gpio_unbanked;
 	unsigned		gpio_irq;
-	int			irq_base;
+	struct irq_domain	*irq_domain;
 };
 
 #define MAX_GPIO_PER_BANK 32
@@ -314,8 +315,7 @@ gpio_irq_handler(unsigned irq, struct irq_desc *desc)
 	desc->irq_data.chip->irq_ack(&desc->irq_data);
 	while (1) {
 		u32		status;
-		int		n;
-		int		res;
+		int		bit;
 
 		/* ack any irqs */
 		status = readl(bank->reg_base + regs->intstat) & mask;
@@ -324,17 +324,12 @@ gpio_irq_handler(unsigned irq, struct irq_desc *desc)
 		writel(status, bank->reg_base + regs->intstat);
 
 		/* now demux them to the right lowlevel handler */
-		n = bank->irq_base;
-		if (irq & 1) {
-			n += 16;
-			status >>= 16;
-		}
-
 		while (status) {
-			res = ffs(status);
-			n += res;
-			generic_handle_irq(n - 1);
-			status >>= res;
+			bit = __ffs(status);
+			status &= ~BIT(bit);
+			generic_handle_irq(
+				irq_find_mapping(bank->irq_domain,
+						 bank->chip.base + bit));
 		}
 	}
 	desc->irq_data.chip->irq_unmask(&desc->irq_data);
@@ -345,10 +340,10 @@ static int gpio_to_irq_banked(struct gpio_chip *chip, unsigned offset)
 {
 	struct davinci_gpio_bank *d = chip2bank(chip);
 
-	if (d->irq_base >= 0)
-		return d->irq_base + offset;
+	if (d->irq_domain)
+		return irq_create_mapping(d->irq_domain, d->chip.base + offset);
 	else
-		return -ENODEV;
+		return -ENXIO;
 }
 
 static int gpio_to_irq_unbanked(struct gpio_chip *chip, unsigned offset)
@@ -388,6 +383,25 @@ static int gpio_irq_type_unbanked(struct irq_data *data, unsigned trigger)
 	return 0;
 }
 
+static int
+davinci_gpio_irq_map(struct irq_domain *d, unsigned int irq, irq_hw_number_t hw)
+{
+	struct davinci_gpio_bank *bank = d->host_data;
+
+	irq_set_chip_and_handler_name(irq, &gpio_irqchip, handle_simple_irq,
+				      "davinci_gpio");
+	irq_set_irq_type(irq, IRQ_TYPE_NONE);
+	irq_set_chip_data(irq, bank);
+	irq_set_handler_data(irq, (void *)__gpio_mask(hw));
+	set_irq_flags(irq, IRQF_VALID);
+
+	return 0;
+}
+
+static const struct irq_domain_ops davinci_gpio_irq_ops = {
+	.map = davinci_gpio_irq_map,
+	.xlate = irq_domain_xlate_onetwocell,
+};
 
 static int davinci_gpio_unbanked_irq_init(struct davinci_gpio_bank *chipb)
 {
@@ -412,7 +426,6 @@ static int davinci_gpio_unbanked_irq_init(struct davinci_gpio_bank *chipb)
 		return -EINVAL;
 	}
 
-	chipb->irq_base = -EINVAL;
 	/* pass "bank 0" GPIO IRQs to AINTC */
 	chipb->chip.to_irq = gpio_to_irq_unbanked;
 	chipb->gpio_irq = bank_irq;
@@ -453,7 +466,7 @@ static int davinci_gpio_banked_irq_init(struct davinci_gpio_bank *chipb)
 	unsigned	bank_irq;
 	struct resource	 *res;
 	struct platform_device *pdev;
-	struct davinci_gpio_bank_pdata *pdata = dev_get_platdata(chipb->dev);
+	struct irq_domain *irq_domain;
 
 	pdev = to_platform_device(chipb->dev);
 
@@ -465,14 +478,26 @@ static int davinci_gpio_banked_irq_init(struct davinci_gpio_bank *chipb)
 
 	/* Each bank uses 2 banked IRQ */
 	bank_irq = res->start;
-
 	if (!bank_irq) {
 		dev_err(chipb->dev, "Invalid IRQ resource\n");
 		return -EINVAL;
 	}
 
+	irq = irq_alloc_descs(-1, 0, chipb->chip.ngpio, 0);
+	if (irq < 0) {
+		dev_err(chipb->dev, "Couldn't allocate IRQ numbers\n");
+		return -ENODEV;
+	}
+
+	irq_domain = irq_domain_add_legacy(NULL, chipb->chip.ngpio, irq, 0,
+					   &davinci_gpio_irq_ops, chipb);
+	if (!irq_domain) {
+		dev_err(chipb->dev, "Couldn't register an IRQ domain\n");
+		return -ENODEV;
+	}
+
 	chipb->chip.to_irq = gpio_to_irq_banked;
-	chipb->irq_base = pdata->intc_irq_num + chipb->chip.base;
+	chipb->irq_domain = irq_domain;
 
 	/* disabled by default, enabled only as needed */
 	writel(~0, chipb->reg_base + chipb->regs->clr_falling);
@@ -482,9 +507,7 @@ static int davinci_gpio_banked_irq_init(struct davinci_gpio_bank *chipb)
 	 * Or, AINTC can handle IRQs for banks of 16 GPIO IRQs, which we
 	 * then chain through our own handler.
 	 */
-	for (gpio = 0, irq = gpio_to_irq(chipb->chip.base);
-			gpio < chipb->chip.ngpio; bank_irq++) {
-		unsigned		i;
+	for (gpio = 0; gpio < chipb->chip.ngpio; bank_irq++, gpio += 16) {
 
 		/* set up all irqs in this bank */
 		irq_set_chained_handler(bank_irq, gpio_irq_handler);
@@ -495,15 +518,6 @@ static int davinci_gpio_banked_irq_init(struct davinci_gpio_bank *chipb)
 		 * the chained irq handler.
 		 */
 		irq_set_handler_data(bank_irq, chipb);
-
-		for (i = 0; i < 16 && gpio < chipb->chip.ngpio;
-			    i++, irq++, gpio++) {
-			irq_set_chip(irq, &gpio_irqchip);
-			irq_set_chip_data(irq, chipb);
-			irq_set_handler_data(irq, (void *)__gpio_mask(gpio));
-			irq_set_handler(irq, handle_simple_irq);
-			set_irq_flags(irq, IRQF_VALID);
-		}
 	}
 
 	davinci_gpio_ctrl_irqen(chipb->dev->parent,

@@ -888,26 +888,149 @@ static struct platform_device dm355_vpbe_dev = {
 static struct resource dm355_gpio_resources[] = {
 	{	/* registers */
 		.start	= DAVINCI_GPIO_BASE,
-		.end	= DAVINCI_GPIO_BASE + SZ_4K - 1,
+		.end	= DAVINCI_GPIO_BASE + 0x10 - 1,
 		.flags	= IORESOURCE_MEM,
-	},
-	{	/* interrupt */
-		.start	= IRQ_DM355_GPIOBNK0,
-		.end	= IRQ_DM355_GPIOBNK6,
-		.flags	= IORESOURCE_IRQ,
 	},
 };
 
-static struct davinci_gpio_platform_data dm355_gpio_platform_data = {
-	.ngpio		= 104,
-	.intc_irq_num	= DAVINCI_N_AINTC_IRQ,
+static struct platform_device davinci_gpio_device = {
+	.name	= "davinci_gpio",
+	.id	= -1,
+	.num_resources		= ARRAY_SIZE(dm355_gpio_resources),
+	.resource		= dm355_gpio_resources,
+};
+
+static struct resource dm355_gpio_bank0_res[] = {
+	{/* registers */
+		.start  = DAVINCI_GPIO_BASE + 0x10,
+		.end    = DAVINCI_GPIO_BASE + 0x28 - 1,
+		.flags  = IORESOURCE_MEM,
+	},
+	{/* interrupt */
+		.start  = IRQ_DM355_GPIOBNK0,
+		.end    = IRQ_DM355_GPIOBNK1,
+		.flags  = IORESOURCE_IRQ,
+	},
+};
+
+struct davinci_gpio_bank_pdata dm355_gpio_bank0_platform_data = {
+	.width = 32,
+	.intc_irq_num = DAVINCI_N_AINTC_IRQ,
+};
+
+static struct platform_device dm355_gpio_bank0_device = {
+	.name   = "davinci_gpio_bank",
+	.id     = -1,
+	.dev = {
+		.platform_data	= &dm355_gpio_bank0_platform_data,
+	},
+	.num_resources		= ARRAY_SIZE(dm355_gpio_bank0_res),
+	.resource		= dm355_gpio_bank0_res,
+};
+
+static struct resource dm355_gpio_bank1_res[] = {
+	{/* registers */
+		.start  = DAVINCI_GPIO_BASE + 0x38,
+		.end    = DAVINCI_GPIO_BASE + 0x38 + 0x28 - 1,
+		.flags  = IORESOURCE_MEM,
+	},
+	{/* interrupt */
+		.start  = IRQ_DM355_GPIOBNK2,
+		.end    = IRQ_DM355_GPIOBNK3,
+		.flags  = IORESOURCE_IRQ,
+	},
+};
+
+struct davinci_gpio_bank_pdata dm355_gpio_bank1_platform_data = {
+	.width = 32,
+	.intc_irq_num = DAVINCI_N_AINTC_IRQ + 32,
+};
+
+static struct platform_device dm355_gpio_bank1_device = {
+	.name   = "davinci_gpio_bank",
+	.id     = -1,
+	.dev = {
+		.platform_data	= &dm355_gpio_bank1_platform_data,
+	},
+	.num_resources		= ARRAY_SIZE(dm355_gpio_bank1_res),
+	.resource		= dm355_gpio_bank1_res,
+};
+
+static struct resource dm355_gpio_bank2_res[] = {
+	{/* registers */
+		.start  = DAVINCI_GPIO_BASE + 0x60,
+		.end    = DAVINCI_GPIO_BASE + 0x60 + 0x28 - 1,
+		.flags  = IORESOURCE_MEM,
+	},
+	{/* interrupt */
+		.start  = IRQ_DM355_GPIOBNK4,
+		.end    = IRQ_DM355_GPIOBNK5,
+		.flags  = IORESOURCE_IRQ,
+	},
+};
+
+struct davinci_gpio_bank_pdata dm355_gpio_bank2_platform_data = {
+	.width = 32,
+	.intc_irq_num = DAVINCI_N_AINTC_IRQ + 64,
+};
+
+static struct platform_device dm355_gpio_bank2_device = {
+	.name   = "davinci_gpio_bank",
+	.id     = -1,
+	.dev = {
+		.platform_data	= &dm355_gpio_bank2_platform_data,
+	},
+	.num_resources		= ARRAY_SIZE(dm355_gpio_bank2_res),
+	.resource		= dm355_gpio_bank2_res,
+};
+
+static struct resource dm355_gpio_bank3_res[] = {
+	{/* registers */
+		.start  = DAVINCI_GPIO_BASE + 0x88,
+		.end    = DAVINCI_GPIO_BASE + 0x88 + 0x28 - 1,
+		.flags  = IORESOURCE_MEM,
+	},
+	{/* interrupt */
+		.start  = IRQ_DM355_GPIOBNK6,
+		.end    = IRQ_DM355_GPIOBNK6,
+		.flags  = IORESOURCE_IRQ,
+	},
+};
+
+struct davinci_gpio_bank_pdata dm355_gpio_bank3_platform_data = {
+	.width = 8,
+	.intc_irq_num = DAVINCI_N_AINTC_IRQ + 96,
+};
+
+static struct platform_device dm355_gpio_bank3_device = {
+	.name   = "davinci_gpio_bank",
+	.id     = -1,
+	.dev = {
+		.platform_data	= &dm355_gpio_bank3_platform_data,
+	},
+	.num_resources		= ARRAY_SIZE(dm355_gpio_bank3_res),
+	.resource		= dm355_gpio_bank3_res,
+};
+
+static struct platform_device *dm355_gpio_bank_devs[] = {
+	&dm355_gpio_bank0_device,
+	&dm355_gpio_bank1_device,
+	&dm355_gpio_bank2_device,
+	&dm355_gpio_bank3_device,
 };
 
 int __init dm355_gpio_register(void)
 {
-	return davinci_gpio_register(dm355_gpio_resources,
-				     ARRAY_SIZE(dm355_gpio_resources),
-				     &dm355_gpio_platform_data);
+	int ret, i;
+	ret = platform_device_register(&davinci_gpio_device);
+	if (ret)
+		return ret;
+
+	for (i = 0; i < ARRAY_SIZE(dm355_gpio_bank_devs); i++)
+		dm355_gpio_bank_devs[i]->dev.parent = &davinci_gpio_device.dev;
+
+	return platform_add_devices(dm355_gpio_bank_devs,
+				     ARRAY_SIZE(dm355_gpio_bank_devs));
 }
 /*----------------------------------------------------------------------*/
 

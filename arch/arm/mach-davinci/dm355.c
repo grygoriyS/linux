@@ -915,7 +915,6 @@ static struct resource dm355_gpio_bank0_res[] = {
 
 struct davinci_gpio_bank_pdata dm355_gpio_bank0_platform_data = {
 	.width = 32,
-	.intc_irq_num = DAVINCI_N_AINTC_IRQ,
 };
 
 static struct platform_device dm355_gpio_bank0_device = {
@@ -943,7 +942,6 @@ static struct resource dm355_gpio_bank1_res[] = {
 
 struct davinci_gpio_bank_pdata dm355_gpio_bank1_platform_data = {
 	.width = 32,
-	.intc_irq_num = DAVINCI_N_AINTC_IRQ + 32,
 };
 
 static struct platform_device dm355_gpio_bank1_device = {
@@ -971,7 +969,6 @@ static struct resource dm355_gpio_bank2_res[] = {
 
 struct davinci_gpio_bank_pdata dm355_gpio_bank2_platform_data = {
 	.width = 32,
-	.intc_irq_num = DAVINCI_N_AINTC_IRQ + 64,
 };
 
 static struct platform_device dm355_gpio_bank2_device = {
@@ -999,7 +996,6 @@ static struct resource dm355_gpio_bank3_res[] = {
 
 struct davinci_gpio_bank_pdata dm355_gpio_bank3_platform_data = {
 	.width = 8,
-	.intc_irq_num = DAVINCI_N_AINTC_IRQ + 96,
 };
 
 static struct platform_device dm355_gpio_bank3_device = {

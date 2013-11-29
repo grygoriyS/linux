@@ -1,4 +1,4 @@
-Davinci General-Purpose Input/Output (GPIO) peripheral bindings
+Davinci/Keystone General-Purpose Input/Output (GPIO) peripheral bindings
 
 Davinci GPIO IP is composite device which has common Configuration
 registers and set GPIO bank blocks with up to 32 GPIO lines per each.
@@ -20,7 +20,7 @@ http://www.ti.com/product/omap-l138
 Davinci GPIO controller
 
 Required Properties:
-- compatible: should be "ti,davinci-gpio"
+- compatible: should be "ti,davinci-gpio","ti,keystone-gpio"
 - reg:	Physical base address of the common Configuration registers and the
 		size of mapped memory.
 - #address-cells = <1>;
@@ -40,7 +40,7 @@ Optional properties:
 Davinci GPIO bank
 
 Required Properties:
-- compatible: should be "ti,davinci-gpio-bank"
+- compatible: should be "ti,davinci-gpio-bank","ti,keystone-gpio-bank"
 - reg:	Physical base address of GPIO bank registers and the
 		size of mapped memory.
 - gpio-controller:	Marks the device node as a gpio controller.

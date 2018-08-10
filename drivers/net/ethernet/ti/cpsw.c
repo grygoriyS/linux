@@ -662,6 +662,84 @@ static void cpsw_set_promiscious(struct net_device *ndev, bool enable)
 	}
 }
 
+static int cpsw_mc_addr_sync(struct net_device *ndev, const u8 *addr)
+{
+	struct cpsw_priv *priv = netdev_priv(ndev);
+	struct cpsw_common *cpsw = priv->cpsw;
+
+	pr_err("%s: add %pM\n", __func__, addr);
+	cpsw_add_mcast(cpsw, priv, (u8 *)addr);
+
+	return 0;
+}
+
+static int cpsw_mc_addr_unsync(struct net_device *ndev, const u8 *addr)
+{
+	struct cpsw_priv *priv = netdev_priv(ndev);
+	struct cpsw_common *cpsw = priv->cpsw;
+	struct cpsw_slave *slave = cpsw->slaves + priv->emac_port;
+
+	/* Under some circumstances, we might receive a request to delete
+	 * our own device address from our uc list. Because we store the
+	 * device address in the VSI's MAC/VLAN filter list, we need to ignore
+	 * such requests and not delete our device address from this list.
+	 */
+	if (ether_addr_equal(addr, ndev->dev_addr))
+		return 0;
+
+	pr_err("%s: del %pM\n", __func__, addr);
+
+	cpsw_ale_del_mcast(cpsw->ale, (u8 *)addr, 0,
+		ALE_VLAN, slave->port_vlan);
+
+	return 0;
+}
+
+static int cpsw_uc_addr_sync(struct net_device *ndev, const u8 *addr)
+{
+	struct cpsw_priv *priv = netdev_priv(ndev);
+	struct cpsw_common *cpsw = priv->cpsw;
+	struct cpsw_slave *slave = cpsw->slaves + priv->emac_port;
+	u16 vid = 0;
+	int flags = 0;
+
+	pr_err("%s: add %pM\n", __func__, addr);
+	if (cpsw->data.dual_emac) {
+		vid = slave->port_vlan;
+		flags = ALE_VLAN | ALE_SECURE;
+	}
+	cpsw_ale_add_ucast(cpsw->ale, (u8 *)addr,
+			   HOST_PORT_NUM, ALE_VLAN |
+			   ALE_SECURE, vid);
+	return 0;
+}
+
+static int cpsw_uc_addr_unsync(struct net_device *ndev, const u8 *addr)
+{
+	struct cpsw_priv *priv = netdev_priv(ndev);
+	struct cpsw_common *cpsw = priv->cpsw;
+	struct cpsw_slave *slave = cpsw->slaves + priv->emac_port;
+	u16 vid = 0;
+	int flags = 0;
+
+	/* Under some circumstances, we might receive a request to delete
+	 * our own device address from our uc list. Because we store the
+	 * device address in the VSI's MAC/VLAN filter list, we need to ignore
+	 * such requests and not delete our device address from this list.
+	 */
+	if (ether_addr_equal(addr, ndev->dev_addr))
+		return 0;
+
+	pr_err("%s: del %pM\n", __func__, addr);
+	if (cpsw->data.dual_emac) {
+		vid = slave->port_vlan;
+		flags = ALE_VLAN | ALE_SECURE;
+	}
+
+	cpsw_ale_del_ucast(cpsw->ale, (u8 *)addr, HOST_PORT_NUM, flags, vid);
+	return 0;
+}
+
 static void cpsw_ndo_set_rx_mode(struct net_device *ndev)
 {
 	struct cpsw_priv *priv = netdev_priv(ndev);
@@ -686,17 +764,8 @@ static void cpsw_ndo_set_rx_mode(struct net_device *ndev)
 	/* Restore allmulti on vlans if necessary */
 	cpsw_ale_set_allmulti(cpsw->ale, priv->ndev->flags & IFF_ALLMULTI);
 
-	/* Clear all mcast from ALE */
-	cpsw_ale_flush_multicast(cpsw->ale, ALE_ALL_PORTS, vid);
-
-	if (!netdev_mc_empty(ndev)) {
-		struct netdev_hw_addr *ha;
-
-		/* program multicast address list into ALE register */
-		netdev_for_each_mc_addr(ha, ndev) {
-			cpsw_add_mcast(priv, ha->addr);
-		}
-	}
+	__dev_mc_sync(ndev, cpsw_mc_addr_sync, cpsw_mc_addr_unsync);
+	__dev_uc_sync(ndev, cpsw_uc_addr_sync, cpsw_uc_addr_unsync);
 }
 
 static void cpsw_intr_enable(struct cpsw_common *cpsw)
@@ -3279,6 +3348,7 @@ static int cpsw_probe_dual_emac(struct cpsw_priv *priv)
 	priv_sl2->emac_port = 1;
 	cpsw->slaves[1].ndev = ndev;
 	ndev->features |= NETIF_F_HW_VLAN_CTAG_FILTER | NETIF_F_HW_VLAN_CTAG_RX;
+	ndev->priv_flags |= IFF_UNICAST_FLT;
 
 	ndev->netdev_ops = &cpsw_netdev_ops;
 	ndev->ethtool_ops = &cpsw_ethtool_ops;
@@ -3540,6 +3610,7 @@ static int cpsw_probe(struct platform_device *pdev)
 	}
 
 	ndev->features |= NETIF_F_HW_VLAN_CTAG_FILTER | NETIF_F_HW_VLAN_CTAG_RX;
+	ndev->priv_flags |= IFF_UNICAST_FLT;
 
 	ndev->netdev_ops = &cpsw_netdev_ops;
 	ndev->ethtool_ops = &cpsw_ethtool_ops;

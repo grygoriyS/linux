@@ -2585,6 +2585,116 @@ static int cpsw_set_mqprio(struct net_device *ndev, void *type_data)
 	return 0;
 }
 
+#include <net/pkt_cls.h>
+
+#include <net/tc_act/tc_mirred.h>
+#include <net/tc_act/tc_pedit.h>
+#include <net/tc_act/tc_gact.h>
+#include <net/tc_act/tc_vlan.h>
+
+int cpsw_configure_flower(struct cpsw_priv *priv,
+			   struct tc_cls_flower_offload *cls, int flags)
+{
+	const struct tc_action *a;
+	LIST_HEAD(actions);
+
+	tcf_exts_to_list(cls->exts, &actions);
+	list_for_each_entry(a, &actions, list) {
+		if (is_tcf_gact_ok(a)) {
+			/* Do nothing */
+			pr_err("is_tcf_gact_ok\n");
+
+		} else if (is_tcf_gact_shot(a)) {
+			pr_err("is_tcf_gact_shot\n");
+
+			/* Do nothing */
+		} else if (is_tcf_mirred_egress_redirect(a)) {
+			pr_err("is_tcf_mirred_egress_redirect\n");
+		} else if (is_tcf_vlan(a)) {
+			u16 proto = be16_to_cpu(tcf_vlan_push_proto(a));
+			u32 vlan_action = tcf_vlan_action(a);
+
+			pr_err("is_tcf_vlan proto%u vlan_action%u\n", proto, vlan_action);
+		} else if (is_tcf_pedit(a)) {
+			pr_err("is_tcf_pedit\n");
+		} else {
+			pr_err("%s: Unsupported action %x %x\n", __func__, a->type, tcf_action);
+			if (a->ops)
+				pr_err("%s: ops type %x %s\n", __func__, a->ops->type, a->ops->kind);
+			return -EOPNOTSUPP;
+		}
+	}
+
+	return 0;
+}
+
+static int
+cpsw_setup_tc_cls_flower(struct cpsw_priv *priv,
+			      struct tc_cls_flower_offload *cls_flower, int flags)
+{
+	switch (cls_flower->command) {
+	case TC_CLSFLOWER_REPLACE:
+		pr_err("TC_CLSFLOWER_REPLACE\n");
+
+		return cpsw_configure_flower(priv, cls_flower, flags);
+	case TC_CLSFLOWER_DESTROY:
+		pr_err("TC_CLSFLOWER_DESTROY\n");
+		return -EOPNOTSUPP;
+	case TC_CLSFLOWER_STATS:
+		pr_err("TC_CLSFLOWER_STATS\n");
+		return -EOPNOTSUPP;
+	default:
+		return -EOPNOTSUPP;
+	}
+}
+
+static int cpsw_setup_tc_cb(enum tc_setup_type type, void *type_data,
+				 void *cb_priv)
+{
+	struct cpsw_priv *priv = cb_priv;
+
+	pr_err("%s\n", __func__);
+
+	if (!tc_cls_can_offload_and_chain0(priv->ndev, type_data))
+		return -EOPNOTSUPP;
+
+	switch (type) {
+	case TC_SETUP_CLSFLOWER:
+		pr_err("TC_SETUP_CLSFLOWER\n");
+
+		return cpsw_setup_tc_cls_flower(priv, type_data, 0);
+	default:
+		return -EOPNOTSUPP;
+	}
+}
+
+static int cpsw_setup_tc_block(struct net_device *ndev,
+				    struct tc_block_offload *f)
+{
+	struct cpsw_priv *priv = netdev_priv(ndev);
+	struct cpsw_common *cpsw = priv->cpsw;
+	pr_err("%s\n", __func__);
+
+	if (f->binder_type != TCF_BLOCK_BINDER_TYPE_CLSACT_INGRESS)
+		return -EOPNOTSUPP;
+	pr_err("%s1\n", __func__);
+
+	switch (f->command) {
+	case TC_BLOCK_BIND:
+		pr_err("TC_BLOCK_BIND\n");
+
+		return tcf_block_cb_register(f->block, cpsw_setup_tc_cb,
+					     priv, priv);
+	case TC_BLOCK_UNBIND:
+		pr_err("TC_BLOCK_UNBIND\n");
+
+		tcf_block_cb_unregister(f->block, cpsw_setup_tc_cb, priv);
+		return 0;
+	default:
+		return -EOPNOTSUPP;
+	}
+}
+
 static int cpsw_ndo_setup_tc(struct net_device *ndev, enum tc_setup_type type,
 			     void *type_data)
 {
@@ -2594,6 +2704,9 @@ static int cpsw_ndo_setup_tc(struct net_device *ndev, enum tc_setup_type type,
 
 	case TC_SETUP_QDISC_MQPRIO:
 		return cpsw_set_mqprio(ndev, type_data);
+
+	case TC_SETUP_BLOCK:
+		return cpsw_setup_tc_block(dev, type_data);
 
 	default:
 		return -EOPNOTSUPP;
@@ -3347,7 +3460,8 @@ static int cpsw_probe_dual_emac(struct cpsw_priv *priv)
 
 	priv_sl2->emac_port = 1;
 	cpsw->slaves[1].ndev = ndev;
-	ndev->features |= NETIF_F_HW_VLAN_CTAG_FILTER | NETIF_F_HW_VLAN_CTAG_RX;
+	ndev->features |= NETIF_F_HW_VLAN_CTAG_FILTER |
+			  NETIF_F_HW_VLAN_CTAG_RX | NETIF_F_HW_TC;
 	ndev->priv_flags |= IFF_UNICAST_FLT;
 
 	ndev->netdev_ops = &cpsw_netdev_ops;
@@ -3609,7 +3723,7 @@ static int cpsw_probe(struct platform_device *pdev)
 		goto clean_dma_ret;
 	}
 
-	ndev->features |= NETIF_F_HW_VLAN_CTAG_FILTER | NETIF_F_HW_VLAN_CTAG_RX;
+	ndev->features |= NETIF_F_HW_VLAN_CTAG_FILTER | NETIF_F_HW_VLAN_CTAG_RX | NETIF_F_HW_TC;
 	ndev->priv_flags |= IFF_UNICAST_FLT;
 
 	ndev->netdev_ops = &cpsw_netdev_ops;

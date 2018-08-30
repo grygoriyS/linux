@@ -665,10 +665,9 @@ static void cpsw_set_promiscious(struct net_device *ndev, bool enable)
 static int cpsw_mc_addr_sync(struct net_device *ndev, const u8 *addr)
 {
 	struct cpsw_priv *priv = netdev_priv(ndev);
-	struct cpsw_common *cpsw = priv->cpsw;
 
 	pr_err("%s: add %pM\n", __func__, addr);
-	cpsw_add_mcast(cpsw, priv, (u8 *)addr);
+	cpsw_add_mcast(priv, (u8 *)addr);
 
 	return 0;
 }
@@ -2618,7 +2617,7 @@ int cpsw_configure_flower(struct cpsw_priv *priv,
 		} else if (is_tcf_pedit(a)) {
 			pr_err("is_tcf_pedit\n");
 		} else {
-			pr_err("%s: Unsupported action %x %x\n", __func__, a->type, tcf_action);
+			pr_err("%s: Unsupported action %x %x\n", __func__, a->type, a->tcfa_action);
 			if (a->ops)
 				pr_err("%s: ops type %x %s\n", __func__, a->ops->type, a->ops->kind);
 			return -EOPNOTSUPP;
@@ -2672,7 +2671,6 @@ static int cpsw_setup_tc_block(struct net_device *ndev,
 				    struct tc_block_offload *f)
 {
 	struct cpsw_priv *priv = netdev_priv(ndev);
-	struct cpsw_common *cpsw = priv->cpsw;
 	pr_err("%s\n", __func__);
 
 	if (f->binder_type != TCF_BLOCK_BINDER_TYPE_CLSACT_INGRESS)
@@ -2684,7 +2682,7 @@ static int cpsw_setup_tc_block(struct net_device *ndev,
 		pr_err("TC_BLOCK_BIND\n");
 
 		return tcf_block_cb_register(f->block, cpsw_setup_tc_cb,
-					     priv, priv);
+					     priv, priv, f->extack);
 	case TC_BLOCK_UNBIND:
 		pr_err("TC_BLOCK_UNBIND\n");
 
@@ -2706,7 +2704,7 @@ static int cpsw_ndo_setup_tc(struct net_device *ndev, enum tc_setup_type type,
 		return cpsw_set_mqprio(ndev, type_data);
 
 	case TC_SETUP_BLOCK:
-		return cpsw_setup_tc_block(dev, type_data);
+		return cpsw_setup_tc_block(ndev, type_data);
 
 	default:
 		return -EOPNOTSUPP;

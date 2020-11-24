@@ -215,10 +215,6 @@ static int cpts_fifo_read(struct cpts *cpts, int match)
 			type, event->high, event->low);
 		switch (type) {
 		case CPTS_EV_PUSH:
-#ifdef CONFIG_TI_1PPS_DM_TIMER
-			list_del_init(&event->list);
-			list_add_tail(&event->list, &cpts->events);
-#else
 			WRITE_ONCE(cpts->cur_timestamp, lo);
 			timecounter_read(&cpts->tc);
 			if (cpts->mult_new) {
@@ -227,7 +223,6 @@ static int cpts_fifo_read(struct cpts *cpts, int match)
 			}
 			if (!cpts->irq_poll)
 				complete(&cpts->ts_push_complete);
-#endif
 			break;
 		case CPTS_EV_TX:
 		case CPTS_EV_RX:
@@ -1739,7 +1734,8 @@ static void cpts_tmr_poll(struct cpts *cpts, bool cpts_poll)
 	tmr_count = READ_TCRR(cpts->odt);
 	cpts_write32(cpts, TS_PUSH, ts_push);
 	tmr_count2 = READ_TCRR(cpts->odt);
-	tmp64 = cpts_ts_read(cpts);	
+	cpts_update_cur_time(cpts, CPTS_EV_PUSH, NULL);
+	tmp64 = timecounter_read(&cpts->tc);
 	cpts_ts = tmp64;
 	cpts_ts_short = do_div(tmp64, 1000000000UL);
 
@@ -1750,8 +1746,8 @@ static void cpts_tmr_poll(struct cpts *cpts, bool cpts_poll)
 	tmp64 = cpts_ts;
 	cpts_ts_short = do_div(tmp64, 100000000UL);
 
-	pr_debug("%s : tmr_cnt2=%u, cpts_ts=%llu\n",
-		 __func__, tmr_count2, cpts_ts);
+	pr_debug("%s : tmr_cnt2=%u, cpts_ts=%llu, state = %d\n",
+		 __func__, tmr_count2, cpts_ts, cpts->pps_state);
 
 	if (cpts->ptp_adjusted) {
 		cpts->pps_state = INIT;

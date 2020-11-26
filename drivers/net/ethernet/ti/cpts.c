@@ -1647,7 +1647,7 @@ static inline void cpts_turn_on_off_1pps_output(struct cpts *cpts, u64 ts)
 				gpio_set_value(cpts->ref_enable_gpio, 0);
 		}
 
-		pr_debug("1pps on at %llu\n", ts);
+		pr_err("1pps on at %llu cpts->hw_timestamp %llu\n", ts, cpts->hw_timestamp);
 	} else if ((ts < 100000000) && (ts >= CPTS_DEFAULT_PPS_WIDTH_NS)) {
 		if (cpts->pps_enable == 1) {
 			pinctrl_select_state(cpts->pins,
@@ -1665,6 +1665,7 @@ static inline void cpts_turn_on_off_1pps_output(struct cpts *cpts, u64 ts)
 			if (cpts->ref_enable_gpio >= 0)
 				gpio_set_value(cpts->ref_enable_gpio, 1);
 		}
+		pr_err("1pps off at %llu cpts->hw_timestamp %llu\n", ts, cpts->hw_timestamp);
 	}
 }
 
@@ -1901,9 +1902,9 @@ static void cpts_tmr_poll(struct cpts *cpts, bool cpts_poll)
 	} /* switch */
 
 	if (updated)
-		pr_info("%s (updated=%u): tmr_diff=%d, tmr_reload_cnt=%u, cpts_ts=%llu\n",
+		pr_debug("%s (updated=%u): tmr_diff=%d, tmr_reload_cnt=%u, cpts_ts=%llu hw_timestamp=%llu\n",
 			 __func__, updated, tmr_diff, tmr_reload_cnt,
-			 cpts_ts);
+			 cpts_ts, cpts->hw_timestamp);
 }
 
 static inline void cpts_latch_pps_stop(struct cpts *cpts)

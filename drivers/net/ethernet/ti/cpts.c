@@ -220,6 +220,11 @@ static int cpts_fifo_read(struct cpts *cpts, int match)
 			if (cpts->mult_new) {
 				cpts->cc.mult = cpts->mult_new;
 				cpts->mult_new = 0;
+#ifdef CONFIG_TI_1PPS_DM_TIMER
+				tmr_reload_cnt = cpts->ppb_new < 0 ?
+					CPTS_TMR_RELOAD_CNT - (-cpts->ppb_new + 0) / (CPTS_TMR_CLK_PERIOD * 10) :
+					CPTS_TMR_RELOAD_CNT + (cpts->ppb_new + 0) / (CPTS_TMR_CLK_PERIOD * 10);
+#endif
 			}
 			if (!cpts->irq_poll)
 				complete(&cpts->ts_push_complete);
@@ -307,7 +312,7 @@ static int cpts_ptp_adjfreq(struct ptp_clock_info *ptp, s32 ppb)
 {
 	struct cpts *cpts = container_of(ptp, struct cpts, info);
 	int neg_adj = 0;
-	u32 diff, mult;
+	u32 diff, mult, nppb = ppb;
 	u64 adj;
 
 	if (ppb < 0) {
@@ -322,15 +327,11 @@ static int cpts_ptp_adjfreq(struct ptp_clock_info *ptp, s32 ppb)
 	mutex_lock(&cpts->ptp_clk_mutex);
 
 	cpts->mult_new = neg_adj ? mult - diff : mult + diff;
+	cpts->ppb_new = nppb;
 
 	cpts_update_cur_time(cpts, CPTS_EV_PUSH, NULL);
 
 	mutex_unlock(&cpts->ptp_clk_mutex);
-#ifdef CONFIG_TI_1PPS_DM_TIMER
-	tmr_reload_cnt = neg_adj ?
-		CPTS_TMR_RELOAD_CNT - (ppb + 0) / (CPTS_TMR_CLK_PERIOD * 10) :
-		CPTS_TMR_RELOAD_CNT + (ppb + 0) / (CPTS_TMR_CLK_PERIOD * 10);
-#endif
 
 	return 0;
 }

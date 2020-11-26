@@ -505,9 +505,7 @@ static int cpts_pps_init(struct cpts *cpts)
 	if (cpts->use_1pps_gen) {
 		spin_lock_init(&cpts->bc_mux_lock);
 
-#ifdef CONFIG_OMAP_DM_TIMER
 		cpts->odt_ops->enable(cpts->odt);
-#endif
 
 		kthread_init_delayed_work(&cpts->pps_work, cpts_pps_kworker);
 		cpts->pps_kworker = kthread_create_worker(0, "pps0");
@@ -520,10 +518,8 @@ static int cpts_pps_init(struct cpts *cpts)
 		}
 	}
 
-#ifdef CONFIG_OMAP_DM_TIMER
 	if (cpts->use_1pps_latch)
 		cpts->odt2_ops->enable(cpts->odt2);
-#endif
 
 	cpts_tmr_init(cpts);
 
@@ -532,7 +528,6 @@ static int cpts_pps_init(struct cpts *cpts)
 
 static void cpts_pps_schedule(struct cpts *cpts)
 {
-	unsigned long flags;
 	bool reported;
 
 	cpts_fifo_read(cpts, -1);
@@ -729,7 +724,7 @@ static void cpts_process_events(struct cpts *cpts)
 	struct cpts_event *event;
 #ifdef CONFIG_TI_1PPS_DM_TIMER
 	struct ptp_clock_event pevent;
-	int ev, reported = 0;
+	int ev;
 #endif
 	unsigned long flags;
 	LIST_HEAD(events);
@@ -1145,7 +1140,6 @@ static int cpts_of_1pps_parse(struct cpts *cpts, struct device_node *node)
 		return -ENXIO;
 	}
 
-#ifdef CONFIG_OMAP_DM_TIMER
 	timer_pdev = of_find_device_by_node(np);
 	if (!timer_pdev) {
 		dev_err(cpts->dev, "Unable to find Timer pdev\n");
@@ -1162,7 +1156,6 @@ static int cpts_of_1pps_parse(struct cpts *cpts, struct device_node *node)
 	cpts->odt_ops = timer_pdata->timer_ops;
 
 	cpts->odt = cpts->odt_ops->request_by_node(np);
-#endif
 	if (!cpts->odt)
 		return -EPROBE_DEFER;
 
@@ -1293,7 +1286,6 @@ static int cpts_of_1pps_latch_parse(struct cpts *cpts, struct device_node *node)
 		return -ENXIO;
 	}
 
-#ifdef CONFIG_OMAP_DM_TIMER
 	timer_pdev = of_find_device_by_node(np2);
 	if (!timer_pdev) {
 		dev_err(cpts->dev, "Unable to find Timer pdev\n");
@@ -1310,7 +1302,6 @@ static int cpts_of_1pps_latch_parse(struct cpts *cpts, struct device_node *node)
 	cpts->odt2_ops = timer_pdata->timer_ops;
 
 	cpts->odt2 = cpts->odt2_ops->request_by_node(np2);
-#endif
 	if (!cpts->odt2)
 		return -EPROBE_DEFER;
 
@@ -1489,7 +1480,6 @@ void cpts_release(struct cpts *cpts)
 		return;
 
 #ifdef CONFIG_TI_1PPS_DM_TIMER
-#ifdef CONFIG_OMAP_DM_TIMER
 	pinctrl_select_state(cpts->pins, cpts->pin_state_latch_off);
 
 	if (cpts->odt) {
@@ -1504,7 +1494,6 @@ void cpts_release(struct cpts *cpts)
 
 	if (cpts->odt || cpts->odt2)
 		devm_pinctrl_put(cpts->pins);
-#endif
 
 	if (cpts->pps_kworker) {
 		kthread_cancel_delayed_work_sync(&cpts->pps_work);
@@ -1544,28 +1533,6 @@ static void cpts_bc_mux_ctrl(void *ctx, int enable)
 	}
 }
 
-static u64 cpts_ts_read(struct cpts *cpts)
-{
-	u64 ns = 0;
-	struct cpts_event *event;
-	struct list_head *this, *next;
-
-	if (cpts_fifo_read(cpts, CPTS_EV_PUSH))
-		pr_err("cpts: ts_read: unable to obtain a time stamp\n");
-
-	list_for_each_safe(this, next, &cpts->events) {
-		event = list_entry(this, struct cpts_event, list);
-		if (event_type(event) == CPTS_EV_PUSH) {
-			list_del_init(&event->list);
-			list_add(&event->list, &cpts->pool);
-			ns = timecounter_cyc2time(&cpts->tc, event->low);
-			break;
-		}
-	}
-
-	return ns;
-}
-
 enum cpts_1pps_state {
 	/* Initial state: try to SYNC to the CPTS timestamp */
 	INIT = 0,
@@ -1599,7 +1566,6 @@ static void cpts_tmr_reinit(struct cpts *cpts)
 	WRITE_TCLR(cpts->odt, BIT(12) | 2 << 10 | BIT(6) | BIT(1));
 	WRITE_TSICR(cpts->odt, BIT(2));
 
-	cpts->count_prev = 0xFFFFFFFF;
 	cpts->pps_state = INIT;
 }
 
@@ -1721,7 +1687,6 @@ static void update_ts_correct(void)
 
 static void cpts_tmr_poll(struct cpts *cpts, bool cpts_poll)
 {
-	unsigned long flags;
 	u32 tmr_count, tmr_count2, count_exp, tmr_diff_abs;
 	s32 tmr_diff = 0;
 	int ts_val;
@@ -1841,8 +1806,8 @@ static void cpts_tmr_poll(struct cpts *cpts, bool cpts_poll)
 			break;
 
 		cpts->pps_state = SYNC;
-		/* pass through */
 
+		fallthrough;
 	case SYNC:
 		{
 			u64 ts = cpts->hw_timestamp;
@@ -1937,8 +1902,6 @@ static void cpts_tmr_poll(struct cpts *cpts, bool cpts_poll)
 		} /* case SYNC */
 
 	} /* switch */
-
-	cpts->count_prev = tmr_count;
 
 	if (updated)
 		pr_info("%s (updated=%u): tmr_diff=%d, tmr_reload_cnt=%u, cpts_ts=%llu\n",

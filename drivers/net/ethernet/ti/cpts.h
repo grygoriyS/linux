@@ -151,7 +151,6 @@ struct cpts {
 	const struct omap_dm_timer_ops *odt_ops;
 	struct omap_dm_timer *odt2;/* timer for 1PPS latch */
 	const struct omap_dm_timer_ops *odt2_ops;
-	u32 count_prev;
 	u64 hw_timestamp;
 	u32 pps_latch_offset;
 	int pps_offset;

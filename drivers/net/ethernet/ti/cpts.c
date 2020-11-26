@@ -463,10 +463,8 @@ static int cpts_pps_enable(struct cpts *cpts, int on)
 		spin_unlock_bh(&cpts->bc_mux_lock);
 	}
 
-	if (cpts->ref_enable == -1) {
+	if (cpts->ref_enable == -1)
 		cpts_pps_start(cpts);
-		cpts_tmr_poll(cpts, false);
-	}
 
 	return 0;
 }
@@ -487,10 +485,8 @@ static int cpts_ref_enable(struct cpts *cpts, int on)
 	if (!on)
 		return 0;
 
-	if (cpts->pps_enable == -1) {
+	if (cpts->pps_enable == -1)
 		cpts_pps_start(cpts);
-		cpts_tmr_poll(cpts, false);
-	}
 
 	return 0;
 }

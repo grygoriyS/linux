@@ -165,8 +165,8 @@ struct cpts {
 	struct pinctrl_state *pin_state_latch_off;
 	struct pinctrl_state *pin_state_latch_on;
 
-	int pps_enable_gpio;
-	int ref_enable_gpio;
+	struct gpio_desc *pps_enable_gpiod;
+	struct gpio_desc *ref_enable_gpiod;
 
 	int pps_tmr_irqn;
 	int pps_latch_irqn;

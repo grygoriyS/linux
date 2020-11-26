@@ -457,9 +457,9 @@ static int cpts_pps_enable(struct cpts *cpts, int on)
 	if (!on)
 		return 0;
 
-	if (cpts->pps_enable_gpio >= 0) {
+	if (cpts->pps_enable_gpiod) {
 		spin_lock_bh(&cpts->bc_mux_lock);
-		gpio_set_value(cpts->pps_enable_gpio, 1);
+		gpiod_set_value(cpts->pps_enable_gpiod, 1);
 		spin_unlock_bh(&cpts->bc_mux_lock);
 	}
 
@@ -535,9 +535,9 @@ static void cpts_pps_schedule(struct cpts *cpts)
 			cpts->pps_enable = -1;
 			pinctrl_select_state(cpts->pins,
 					     cpts->pin_state_pwm_off);
-			if (cpts->pps_enable_gpio >= 0) {
+			if (cpts->pps_enable_gpiod) {
 				spin_lock_bh(&cpts->bc_mux_lock);
-				gpio_set_value(cpts->pps_enable_gpio, 0);
+				gpiod_set_value(cpts->pps_enable_gpiod, 0);
 				spin_unlock_bh(&cpts->bc_mux_lock);
 			}
 		}
@@ -1127,7 +1127,6 @@ static int cpts_of_1pps_parse(struct cpts *cpts, struct device_node *node)
 	struct device_node *np = NULL;
 	struct platform_device *timer_pdev;
 	struct dmtimer_platform_data *timer_pdata;
-	int gpio, ret;
 	u32 prop;
 
 	np = of_parse_phandle(node, "pps_timer", 0);
@@ -1192,21 +1191,14 @@ static int cpts_of_1pps_parse(struct cpts *cpts, struct device_node *node)
 	/* The 1PPS enable-gpio signal is only optional and therefore it
 	 * may not be provided by DTB.
 	 */
-	cpts->pps_enable_gpio = -1;
-	gpio = of_get_named_gpio(node, "pps-enable-gpios", 0);
-	if (!gpio_is_valid(gpio)) {
-		dev_dbg(cpts->dev, "there is no pps-enable gpio\n");
-	} else {
+	cpts->pps_enable_gpiod = devm_gpiod_get_optional(cpts->dev,
+							 "pps-enable",
+							 GPIOD_OUT_HIGH);
+	if (IS_ERR(cpts->pps_enable_gpiod))
+		return PTR_ERR(cpts->pps_enable_gpiod);
 
-		ret = devm_gpio_request(cpts->dev, gpio, "pps-enable-ctrl");
-		if (ret) {
-			dev_err(cpts->dev,
-				"failed to acquire pps-enable gpio\n");
-			return ret;
-		}
-		cpts->pps_enable_gpio = gpio;
-		gpio_direction_output(gpio, 0);
-	}
+	if (!cpts->pps_enable_gpiod)
+		dev_err(cpts->dev, "pps_enable_gpiod fail\n");
 
 	if (!of_property_read_u32(node, "cpts_pps_hw_event_index", &prop))
 		cpts->pps_hw_index = prop;
@@ -1217,7 +1209,7 @@ static int cpts_of_1pps_parse(struct cpts *cpts, struct device_node *node)
 		cpts->pps_hw_index = CPTS_PPS_HW_INDEX;
 
 	dev_info(cpts->dev, "cpts pps hw event index = %d\n",
-		cpts->pps_hw_index);
+		 cpts->pps_hw_index);
 
 	cpts->use_1pps_gen = true;
 
@@ -1246,24 +1238,15 @@ static int cpts_of_1pps_parse(struct cpts *cpts, struct device_node *node)
 		/* The 1PPS ref-enable-gpio signal is only optional and
 		 * therefore it	 may not be provided by DTB.
 		 */
-		cpts->ref_enable_gpio = -1;
-		gpio = of_get_named_gpio(node, "ref-enable-gpios", 0);
-		if (!gpio_is_valid(gpio)) {
-			dev_dbg(cpts->dev,
-				"there is no ref-enable gpio\n");
-		} else {
-			ret = devm_gpio_request(cpts->dev, gpio,
-						"ref-enable-ctrl");
-			if (ret) {
-				dev_err(cpts->dev,
-					"failed to acquire ref-enable gpio\n");
-				devm_gpio_free(cpts->dev,
-					       cpts->pps_enable_gpio);
-				return ret;
-			}
-			cpts->ref_enable_gpio = gpio;
-			gpio_direction_output(gpio, 1);
-		}
+		cpts->ref_enable_gpiod = devm_gpiod_get_optional(cpts->dev,
+								 "ref-enable",
+								 GPIOD_OUT_HIGH);
+		if (IS_ERR(cpts->ref_enable_gpiod))
+			return PTR_ERR(cpts->ref_enable_gpiod);
+
+		if (!cpts->ref_enable_gpiod)
+			dev_err(cpts->dev, "ref_enable_gpiod fail\n");
+
 		cpts->use_1pps_ref = true;
 	}
 
@@ -1489,9 +1472,6 @@ void cpts_release(struct cpts *cpts)
 		cpts->odt2_ops->free(cpts->odt2);
 	}
 
-	if (cpts->odt || cpts->odt2)
-		devm_pinctrl_put(cpts->pins);
-
 	if (cpts->pps_kworker) {
 		kthread_cancel_delayed_work_sync(&cpts->pps_work);
 		kthread_destroy_worker(cpts->pps_kworker);
@@ -1517,16 +1497,16 @@ static void cpts_bc_mux_ctrl(void *ctx, int enable)
 	struct cpts *cpts = (struct cpts *)ctx;
 	static int state;
 
-	if (cpts->pps_enable_gpio < 0)
+	if (cpts->pps_enable_gpiod)
 		return;
 
 	if (enable) {
 		if (!state)
-			gpio_set_value(cpts->pps_enable_gpio, 0);
+			gpiod_set_value(cpts->pps_enable_gpiod, 0);
 	} else {
-		state = gpio_get_value(cpts->pps_enable_gpio);
+		state = gpiod_get_value(cpts->pps_enable_gpiod);
 		if (!state)
-			gpio_set_value(cpts->pps_enable_gpio, 1);
+			gpiod_set_value(cpts->pps_enable_gpiod, 1);
 	}
 }
 
@@ -1633,9 +1613,9 @@ static inline void cpts_turn_on_off_1pps_output(struct cpts *cpts, u64 ts)
 		if (cpts->pps_enable == 1) {
 			pinctrl_select_state(cpts->pins,
 					     cpts->pin_state_pwm_on);
-			if (cpts->pps_enable_gpio >= 0) {
+			if (cpts->pps_enable_gpiod) {
 				spin_lock_bh(&cpts->bc_mux_lock);
-				gpio_set_value(cpts->pps_enable_gpio, 0);
+				gpiod_set_value(cpts->pps_enable_gpiod, 0);
 				spin_unlock_bh(&cpts->bc_mux_lock);
 			}
 		}
@@ -1643,8 +1623,8 @@ static inline void cpts_turn_on_off_1pps_output(struct cpts *cpts, u64 ts)
 		if (cpts->ref_enable == 1) {
 			pinctrl_select_state(cpts->pins,
 					     cpts->pin_state_ref_on);
-			if (cpts->ref_enable_gpio >= 0)
-				gpio_set_value(cpts->ref_enable_gpio, 0);
+			if (cpts->ref_enable_gpiod)
+				gpiod_set_value(cpts->ref_enable_gpiod, 0);
 		}
 
 		pr_err("1pps on at %llu cpts->hw_timestamp %llu\n", ts, cpts->hw_timestamp);
@@ -1652,9 +1632,9 @@ static inline void cpts_turn_on_off_1pps_output(struct cpts *cpts, u64 ts)
 		if (cpts->pps_enable == 1) {
 			pinctrl_select_state(cpts->pins,
 					     cpts->pin_state_pwm_off);
-			if (cpts->pps_enable_gpio >= 0) {
+			if (cpts->pps_enable_gpiod) {
 				spin_lock_bh(&cpts->bc_mux_lock);
-				gpio_set_value(cpts->pps_enable_gpio, 1);
+				gpiod_set_value(cpts->pps_enable_gpiod, 1);
 				spin_unlock_bh(&cpts->bc_mux_lock);
 			}
 		}
@@ -1662,8 +1642,8 @@ static inline void cpts_turn_on_off_1pps_output(struct cpts *cpts, u64 ts)
 		if (cpts->ref_enable == 1) {
 			pinctrl_select_state(cpts->pins,
 					     cpts->pin_state_ref_off);
-			if (cpts->ref_enable_gpio >= 0)
-				gpio_set_value(cpts->ref_enable_gpio, 1);
+			if (cpts->ref_enable_gpiod)
+				gpiod_set_value(cpts->ref_enable_gpiod, 1);
 		}
 		pr_err("1pps off at %llu cpts->hw_timestamp %llu\n", ts, cpts->hw_timestamp);
 	}

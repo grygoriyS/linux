@@ -554,8 +554,9 @@ static void cpts_pps_schedule(struct cpts *cpts)
 	}
 
 	if (reported != 1)
-		pr_err("error:%s is called with %d CPTS HW events!\n",
-		       __func__, reported);
+		dev_info(cpts->dev,
+			 "error:%s is called with %d CPTS HW events!\n",
+			 __func__, reported);
 }
 #endif
 
@@ -613,7 +614,7 @@ static int cpts_ptp_enable(struct ptp_clock_info *ptp,
 	switch (rq->type) {
 	case PTP_CLK_REQ_EXTTS:
 #ifdef CONFIG_TI_1PPS_DM_TIMER
-		pr_info("PTP_CLK_REQ_EXTTS: index = %d, on = %d\n", rq->extts.index, on);
+		dev_info(cpts->dev, "PTP_CLK_REQ_EXTTS: index = %d, on = %d\n", rq->extts.index, on);
 #endif
 		return cpts_extts_enable(cpts, rq->extts.index, on);
 #ifdef CONFIG_TI_1PPS_DM_TIMER
@@ -621,7 +622,7 @@ static int cpts_ptp_enable(struct ptp_clock_info *ptp,
 		if (cpts->use_1pps_gen) {
 			ok = ptp_bc_clock_sync_enable(cpts->bc_clkid, on);
 			if (!ok) {
-				pr_info("cpts error: bc clk sync pps enable denied\n");
+				dev_err(cpts->dev, "cpts error: bc clk sync pps enable denied\n");
 				return -EBUSY;
 			}
 			return cpts_pps_enable(cpts, on);
@@ -745,8 +746,9 @@ static void cpts_process_events(struct cpts *cpts)
 				cpts->pps_latch_receive = false;
 			} else {
 				cpts_latch_pps_stop(cpts);
-				pr_info("%s: enter pps_latch INIT state\n"
-					, __func__);
+				dev_info(cpts->dev,
+					 "%s: enter pps_latch INIT state\n",
+					 __func__);
 			}
 		}
 #endif
@@ -975,7 +977,7 @@ int cpts_register(struct cpts *cpts)
 		cpts->odt_ops->enable(cpts->odt);
 
 		cpts->bc_clkid = ptp_bc_clock_register(PTP_BC_CLOCK_TYPE_GMAC);
-		pr_info("cpts ptp bc clkid %d\n", cpts->bc_clkid);
+		dev_info(cpts->dev, "cpts ptp bc clkid %d\n", cpts->bc_clkid);
 		ptp_bc_mux_ctrl_register((void *)cpts, &cpts->bc_mux_lock, cpts_bc_mux_ctrl);
 		cpts_write32(cpts, cpts_read32(cpts, control) |
 			     cpts_hw_ts_push_en[cpts->pps_hw_index], control);
@@ -1480,7 +1482,8 @@ struct cpts *cpts_create(struct device *dev, void __iomem *regs,
 
 	if (IS_ERR(cpts->pps_kworker)) {
 		ret = PTR_ERR(cpts->pps_kworker);
-		pr_err("failed to create cpts pps worker %d\n", ret);
+		dev_err(cpts->dev,
+			"failed to create cpts pps worker %d\n", ret);
 		return ERR_PTR(ret);
 	}
 
@@ -1670,7 +1673,8 @@ static inline void cpts_turn_on_off_1pps_output(struct cpts *cpts, u64 ts)
 				gpiod_set_value(cpts->ref_enable_gpiod, 0);
 		}
 
-		pr_err("1pps on at %llu cpts->hw_timestamp %llu\n", ts, cpts->hw_timestamp);
+		dev_dbg(cpts->dev, "1pps on at %llu cpts->hw_timestamp %llu\n",
+			ts, cpts->hw_timestamp);
 	} else if ((ts < 100000000) && (ts >= CPTS_DEFAULT_PPS_WIDTH_NS)) {
 		if (cpts->pps_enable == 1) {
 			pinctrl_select_state(cpts->pins,
@@ -1688,7 +1692,8 @@ static inline void cpts_turn_on_off_1pps_output(struct cpts *cpts, u64 ts)
 			if (cpts->ref_enable_gpiod)
 				gpiod_set_value(cpts->ref_enable_gpiod, 1);
 		}
-		pr_err("1pps off at %llu cpts->hw_timestamp %llu\n", ts, cpts->hw_timestamp);
+		dev_info(cpts->dev, "1pps off at %llu cpts->hw_timestamp %llu\n",
+			 ts, cpts->hw_timestamp);
 	}
 }
 
@@ -1732,8 +1737,8 @@ static void cpts_tmr_poll(struct cpts *cpts, bool cpts_poll)
 	tmp64 = cpts_ts;
 	cpts_ts_short = do_div(tmp64, 100000000UL);
 
-	pr_debug("%s : tmr_cnt2=%u, cpts_ts=%llu, state = %d\n",
-		 __func__, tmr_count2, cpts_ts, cpts->pps_state);
+	dev_dbg(cpts->dev, "%s : tmr_cnt2=%u, cpts_ts=%llu, state = %d\n",
+		__func__, tmr_count2, cpts_ts, cpts->pps_state);
 
 	if (cpts->ptp_adjusted) {
 		cpts->pps_state = INIT;
@@ -1772,7 +1777,7 @@ static void cpts_tmr_poll(struct cpts *cpts, bool cpts_poll)
 				tmr_reload_cnt_prev = tmr_reload_cnt;
 				cpts_ts_trans = (cpts_ts - cpts_ts_short) +
 					100000000ULL;
-				pr_info("%s: exit INIT state with pps_offset = %d\n"
+				dev_info(cpts->dev, "%s: exit INIT state with pps_offset = %d\n"
 					, __func__, cpts->pps_offset);
 			}
 		}
@@ -1796,8 +1801,8 @@ static void cpts_tmr_poll(struct cpts *cpts, bool cpts_poll)
 			 */
 			if (abs(ts_val) > 1000000UL) {
 				cpts->pps_state = INIT;
-				pr_info("%s: re-enter INIT state due to large offset %d\n",
-					__func__, ts_val);
+				dev_info(cpts->dev, "%s: re-enter INIT state due to large offset %d\n",
+					 __func__, ts_val);
 				/* restore the timer period to 100ms */
 				WRITE_TLDR(cpts->odt, tmr_reload_cnt);
 				break;
@@ -1846,8 +1851,8 @@ static void cpts_tmr_poll(struct cpts *cpts, bool cpts_poll)
 			 */
 			if (abs(ts_val) > 1000000UL) {
 				cpts->pps_state = INIT;
-				pr_info("%s: re-enter INIT state due to large offset %d\n",
-					__func__, ts_val);
+				dev_info(cpts->dev, "%s: re-enter INIT state due to large offset %d\n",
+					 __func__, ts_val);
 				break;
 			}
 
@@ -1884,8 +1889,8 @@ static void cpts_tmr_poll(struct cpts *cpts, bool cpts_poll)
 						     tmr_reload_cnt - 1);
 			}
 
-			pr_debug("%s: ts_val = %d, ts_val_prev = %d\n",
-				 __func__, ts_val, ts_val_prev);
+			dev_dbg(cpts->dev, "%s: ts_val = %d, ts_val_prev = %d\n",
+				__func__, ts_val, ts_val_prev);
 
 			ts_correct = tmr_diff * CPTS_TMR_CLK_PERIOD;
 			ts_val_prev = ts_val;
@@ -1907,8 +1912,8 @@ static void cpts_tmr_poll(struct cpts *cpts, bool cpts_poll)
 					 * declare it is out of sync
 					 */
 					cpts->pps_state = INIT;
-					pr_info("%s: enter INIT state\n",
-						__func__);
+					dev_info(cpts->dev, "%s: enter INIT state\n",
+						 __func__);
 					break;
 				}
 			} else {
@@ -1925,9 +1930,9 @@ static void cpts_tmr_poll(struct cpts *cpts, bool cpts_poll)
 	} /* switch */
 
 	if (updated)
-		pr_debug("%s (updated=%u): tmr_diff=%d, tmr_reload_cnt=%u, cpts_ts=%llu hw_timestamp=%llu\n",
-			 __func__, updated, tmr_diff, tmr_reload_cnt,
-			 cpts_ts, cpts->hw_timestamp);
+		dev_dbg(cpts->dev, "%s (updated=%u): tmr_diff=%d, tmr_reload_cnt=%u, cpts_ts=%llu hw_timestamp=%llu\n",
+			__func__, updated, tmr_diff, tmr_reload_cnt,
+			cpts_ts, cpts->hw_timestamp);
 }
 
 static inline void cpts_latch_pps_stop(struct cpts *cpts)
@@ -1983,8 +1988,8 @@ static void cpts_latch_proc(struct cpts *cpts, u32 latch_cnt)
 				cpts_latch_pps_start(cpts);
 				cpts->pps_latch_state = SYNC;
 				init_cnt = 0;
-				pr_info("%s: enter SYNC state\n"
-					, __func__);
+				dev_info(cpts->dev, "%s: enter SYNC state\n",
+					 __func__);
 				break;
 			}
 			init_cnt++;
@@ -2017,14 +2022,15 @@ static void cpts_latch_proc(struct cpts *cpts, u32 latch_cnt)
 			cpts->pps_latch_state = NONADJUST;
 			cpts_latch_pps_start(cpts);
 			init_cnt = 0;
-			pr_info("%s: enter NONADJUST state\n", __func__);
+			dev_info(cpts->dev, "%s: enter NONADJUST state\n",
+				 __func__);
 		}
 
 		if (cpts->pps_latch_state == SYNC)
-			pr_info("%s: enter SYNC state\n", __func__);
+			dev_info(cpts->dev, "%s: enter SYNC state\n", __func__);
 		else
-			pr_debug("%s: offset = %u, latch_cnt = %u, reload_cnt =%u\n",
-				 __func__, offset * 10, latch_cnt, reload_cnt);
+			dev_dbg(cpts->dev, "%s: offset = %u, latch_cnt = %u, reload_cnt =%u\n",
+				__func__, offset * 10, latch_cnt, reload_cnt);
 		break;
 
 	case ADJUST:
@@ -2042,8 +2048,8 @@ static void cpts_latch_proc(struct cpts *cpts, u32 latch_cnt)
 				cpts_latch_pps_stop(cpts);
 				cpts->pps_latch_state = INIT;
 				skip = false;
-				pr_info("%s: re-enter INIT state due to large_offset %d\n"
-					, __func__, offset);
+				dev_info(cpts->dev, "%s: re-enter INIT state due to large_offset %d\n",
+					 __func__, offset);
 				break;
 			} else if (offset < CPTS_LATCH_TICK_THRESH_MIN) {
 				reload_cnt -= (CPTS_LATCH_TICK_THRESH_MID -
@@ -2071,8 +2077,8 @@ static void cpts_latch_proc(struct cpts *cpts, u32 latch_cnt)
 		break;
 
 	} /* switch */
-	pr_debug("%s(%d): offset = %u(0x%x)\n",
-		 __func__, cpts->pps_latch_state, offset, offset);
+	dev_dbg(cpts->dev, "%s(%d): offset = %u(0x%x)\n",
+		__func__, cpts->pps_latch_state, offset, offset);
 }
 
 static int int_cnt;
@@ -2087,7 +2093,7 @@ static irqreturn_t cpts_1pps_tmr_interrupt(int irq, void *dev_id)
 	if (int_cnt <= 1000)
 		int_cnt++;
 	if ((int_cnt % 100) == 0)
-		pr_info("%s %d\n", __func__, int_cnt);
+		dev_dbg(cpts->dev, "%s %d\n", __func__, int_cnt);
 
 	return IRQ_HANDLED;
 }
@@ -2104,7 +2110,7 @@ static irqreturn_t cpts_1pps_latch_interrupt(int irq, void *dev_id)
 	if (latch_cnt <= 100)
 		latch_cnt++;
 	if ((latch_cnt % 10) == 0)
-		pr_info("%s %d\n", __func__, latch_cnt);
+		dev_dbg(cpts->dev, "%s %d\n", __func__, latch_cnt);
 
 	return IRQ_HANDLED;
 }

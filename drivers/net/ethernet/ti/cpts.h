@@ -124,6 +124,7 @@ struct cpts {
 	int phc_index;
 	struct clk *refclk;
 	struct list_head events;
+	struct list_head events_pps;
 	struct list_head pool;
 	struct cpts_event pool_data[CPTS_MAX_EVENTS];
 	unsigned long ov_check_period;

@@ -246,10 +246,13 @@ static int cpts_fifo_read(struct cpts *cpts, int match)
 			pevent.type = PTP_CLOCK_EXTTS;
 			pevent.index = cpts_event_port(event) - 1;
 #ifdef CONFIG_TI_1PPS_DM_TIMER
-			event->tmo +=
+			event->tmo = jiffies +
 				msecs_to_jiffies(CPTS_EVENT_HWSTAMP_TIMEOUT);
 			list_del_init(&event->list);
-			list_add_tail(&event->list, &cpts->events);
+			if (pevent.index == cpts->pps_hw_index)
+				list_add_tail(&event->list, &cpts->events_pps);
+			else
+				list_add_tail(&event->list, &cpts->events);
 #else
 			ptp_clock_event(cpts->clock, &pevent);
 #endif
@@ -393,22 +396,48 @@ static int cpts_proc_pps_ts_events(struct cpts *cpts)
 {
 	struct list_head *this, *next;
 	struct cpts_event *event;
-	int reported = 0, ev;
+	unsigned long flags;
+	LIST_HEAD(events_free);
+	LIST_HEAD(events);
+	int reported = 0;
+	int ev_type;
 
-	list_for_each_safe(this, next, &cpts->events) {
+	spin_lock_irqsave(&cpts->lock, flags);
+	list_splice_init(&cpts->events_pps, &events);
+	spin_unlock_irqrestore(&cpts->lock, flags);
+
+	list_for_each_safe(this, next, &events) {
 		event = list_entry(this, struct cpts_event, list);
-		ev = event_type(event);
-		if (ev == CPTS_EV_HW &&
-		    (cpts_event_port(event) == (cpts->pps_hw_index + 1))) {
+
+		if (time_after(jiffies, event->tmo)) {
 			list_del_init(&event->list);
-			list_add(&event->list, &cpts->pool);
-			/* record the timestamp only */
-			cpts->hw_timestamp =
-				timecounter_cyc2time(&cpts->tc, event->low);
-			++reported;
+			list_add(&event->list, &events_free);
+			dev_err(cpts->dev, "dropped PPS event %lld\n",
+				event->timestamp);
 			continue;
 		}
+
+		ev_type = event_type(event);
+
+		if (ev_type != CPTS_EV_HW ||
+		    cpts_event_port(event) != cpts->pps_hw_index + 1) {
+			list_del_init(&event->list);
+			list_add(&event->list, &events_free);
+			dev_err(cpts->dev, "dropped PPS event %lld invalid id\n",
+				event->timestamp);
+		}
+
+		list_del_init(&event->list);
+		list_add(&event->list, &events_free);
+		/* record the timestamp only */
+		cpts->hw_timestamp = event->timestamp;
+		++reported;
 	}
+
+	spin_lock_irqsave(&cpts->lock, flags);
+	list_splice_tail(&events_free, &cpts->pool);
+	spin_unlock_irqrestore(&cpts->lock, flags);
+
 	return reported;
 }
 
@@ -921,6 +950,8 @@ int cpts_register(struct cpts *cpts)
 	INIT_LIST_HEAD(&cpts->pool);
 	for (i = 0; i < CPTS_MAX_EVENTS; i++)
 		list_add(&cpts->pool_data[i].list, &cpts->pool);
+
+	INIT_LIST_HEAD(&cpts->events_pps);
 
 	clk_enable(cpts->refclk);
 

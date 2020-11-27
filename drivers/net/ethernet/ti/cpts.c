@@ -689,7 +689,7 @@ static void cpts_process_events(struct cpts *cpts)
 	struct cpts_event *event;
 #ifdef CONFIG_TI_1PPS_DM_TIMER
 	struct ptp_clock_event pevent;
-	int ev;
+	int ev_type;
 #endif
 	unsigned long flags;
 	LIST_HEAD(events);
@@ -702,10 +702,11 @@ static void cpts_process_events(struct cpts *cpts)
 	list_for_each_safe(this, next, &events) {
 		event = list_entry(this, struct cpts_event, list);
 #ifdef CONFIG_TI_1PPS_DM_TIMER
-		ev = event_type(event);
-		if (ev == CPTS_EV_HW && (cpts->hw_ts_enable & (1 << (cpts_event_port(event) - 1)))) {
+		ev_type = event_type(event);
+		if (ev_type == CPTS_EV_HW &&
+		    (cpts->hw_ts_enable & (1 << (cpts_event_port(event) - 1)))) {
 			list_del_init(&event->list);
-			list_add(&event->list, &cpts->pool);
+			list_add(&event->list, &events_free);
 			pevent.timestamp = event->timestamp;
 			pevent.type = PTP_CLOCK_EXTTS;
 			pevent.index = cpts_event_port(event) - 1;

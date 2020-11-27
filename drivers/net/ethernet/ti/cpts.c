@@ -105,8 +105,8 @@ static u32 tmr_reload_cnt = CPTS_TMR_RELOAD_CNT;
 static u32 tmr_reload_cnt_prev = CPTS_TMR_RELOAD_CNT;
 static int ts_correct;
 
-static void cpts_tmr_init(struct cpts *cpts);
 static void cpts_tmr_reinit(struct cpts *cpts);
+static void cpts_latch_tmr_init(struct cpts *cpts);
 static irqreturn_t cpts_1pps_tmr_interrupt(int irq, void *dev_id);
 static irqreturn_t cpts_1pps_latch_interrupt(int irq, void *dev_id);
 static void cpts_tmr_poll(struct cpts *cpts, bool cpts_poll);
@@ -491,38 +491,6 @@ static int cpts_ref_enable(struct cpts *cpts, int on)
 	return 0;
 }
 
-static int cpts_pps_init(struct cpts *cpts)
-{
-	int err;
-
-	cpts->pps_enable = -1;
-	cpts->ref_enable = -1;
-	cpts->pps_offset = 0;
-
-	if (cpts->use_1pps_gen) {
-		spin_lock_init(&cpts->bc_mux_lock);
-
-		cpts->odt_ops->enable(cpts->odt);
-
-		kthread_init_delayed_work(&cpts->pps_work, cpts_pps_kworker);
-		cpts->pps_kworker = kthread_create_worker(0, "pps0");
-
-		if (IS_ERR(cpts->pps_kworker)) {
-			err = PTR_ERR(cpts->pps_kworker);
-			pr_err("failed to create cpts pps worker %d\n", err);
-			// TBD:add error handling
-			return -1;
-		}
-	}
-
-	if (cpts->use_1pps_latch)
-		cpts->odt2_ops->enable(cpts->odt2);
-
-	cpts_tmr_init(cpts);
-
-	return 0;
-}
-
 static void cpts_pps_schedule(struct cpts *cpts)
 {
 	bool reported;
@@ -537,7 +505,7 @@ static void cpts_pps_schedule(struct cpts *cpts)
 					     cpts->pin_state_pwm_off);
 			if (cpts->pps_enable_gpiod) {
 				spin_lock_bh(&cpts->bc_mux_lock);
-				gpiod_set_value(cpts->pps_enable_gpiod, 0);
+				gpiod_set_value(cpts->pps_enable_gpiod, 1);
 				spin_unlock_bh(&cpts->bc_mux_lock);
 			}
 		}
@@ -972,11 +940,29 @@ int cpts_register(struct cpts *cpts)
 #ifdef CONFIG_TI_1PPS_DM_TIMER
 
 	if (cpts->use_1pps_gen) {
+		cpts->odt_ops->enable(cpts->odt);
+
 		cpts->bc_clkid = ptp_bc_clock_register(PTP_BC_CLOCK_TYPE_GMAC);
 		pr_info("cpts ptp bc clkid %d\n", cpts->bc_clkid);
 		ptp_bc_mux_ctrl_register((void *)cpts, &cpts->bc_mux_lock, cpts_bc_mux_ctrl);
 		cpts_write32(cpts, cpts_read32(cpts, control) |
 			     cpts_hw_ts_push_en[cpts->pps_hw_index], control);
+
+		/* initialize timer16 for 1pps generator */
+		writel_relaxed(OMAP_TIMER_INT_OVERFLOW, cpts->odt->irq_ena);
+		__omap_dm_timer_write(cpts->odt, OMAP_TIMER_WAKEUP_EN_REG,
+				      OMAP_TIMER_INT_OVERFLOW, 0);
+	}
+
+	if (cpts->use_1pps_latch) {
+		cpts->odt2_ops->enable(cpts->odt2);
+
+		/* initialize timer15 for 1pps latch */
+		cpts_latch_tmr_init(cpts);
+
+		writel_relaxed(OMAP_TIMER_INT_CAPTURE, cpts->odt2->irq_ena);
+		__omap_dm_timer_write(cpts->odt2, OMAP_TIMER_WAKEUP_EN_REG,
+				      OMAP_TIMER_INT_CAPTURE, 0);
 	}
 #endif
 	return 0;
@@ -992,11 +978,50 @@ void cpts_unregister(struct cpts *cpts)
 	if (WARN_ON(!cpts->clock))
 		return;
 
+#ifdef CONFIG_TI_1PPS_DM_TIMER
+
+	if (cpts->use_1pps_gen) {
+		cpts_pps_stop(cpts);
+
+		writel_relaxed(0, cpts->odt->irq_ena);
+		__omap_dm_timer_write(cpts->odt, 0, OMAP_TIMER_INT_OVERFLOW, 0);
+
+		kthread_cancel_delayed_work_sync(&cpts->pps_work);
+
+		pinctrl_select_state(cpts->pins, cpts->pin_state_pwm_off);
+		if (cpts->pps_enable_gpiod)
+			gpiod_set_value(cpts->pps_enable_gpiod, 1);
+
+		if (cpts->use_1pps_ref) {
+			pinctrl_select_state(cpts->pins,
+					     cpts->pin_state_ref_off);
+			if (cpts->ref_enable_gpiod)
+				gpiod_set_value(cpts->ref_enable_gpiod, 1);
+		}
+
+		ptp_bc_clock_unregister(cpts->bc_clkid);
+
+		cpts->pps_enable = -1;
+		cpts->ref_enable = -1;
+
+		cpts->odt_ops->disable(cpts->odt);
+	}
+
+	if (cpts->use_1pps_latch) {
+		cpts_latch_pps_stop(cpts);
+
+		writel_relaxed(0, cpts->odt2->irq_ena);
+		__omap_dm_timer_write(cpts->odt2, 0, OMAP_TIMER_INT_CAPTURE, 0);
+
+		pinctrl_select_state(cpts->pins,
+				     cpts->pin_state_latch_off);
+
+		cpts->odt2_ops->disable(cpts->odt2);
+	}
+#endif
+
 	ptp_clock_unregister(cpts->clock);
 	cpts->clock = NULL;
-#ifdef CONFIG_TI_1PPS_DM_TIMER
-	ptp_bc_clock_unregister(cpts->bc_clkid);
-#endif
 
 	cpts_write32(cpts, 0, int_enable);
 	cpts_write32(cpts, 0, control);
@@ -1162,9 +1187,11 @@ static int cpts_of_1pps_parse(struct cpts *cpts, struct device_node *node)
 	}
 
 	cpts->pps_tmr_irqn = of_irq_get(np, 0);
-	if (!cpts->pps_tmr_irqn) {
+	if (cpts->pps_tmr_irqn <= 0) {
 		dev_err(cpts->dev, "cannot get 1pps timer interrupt number\n");
-		return -EINVAL;
+		if (!cpts->pps_tmr_irqn)
+			cpts->pps_tmr_irqn = -ENXIO;
+		return cpts->pps_tmr_irqn;
 	}
 
 	cpts->pins = devm_pinctrl_get(cpts->dev);
@@ -1293,8 +1320,12 @@ static int cpts_of_1pps_latch_parse(struct cpts *cpts, struct device_node *node)
 	}
 
 	cpts->pps_latch_irqn = of_irq_get(np2, 0);
-	if (!cpts->pps_latch_irqn)
+	if (cpts->pps_latch_irqn <= 0) {
 		dev_err(cpts->dev, "cannot get 1pps latch interrupt number\n");
+		if (!cpts->pps_latch_irqn)
+			cpts->pps_latch_irqn = -ENXIO;
+		return cpts->pps_latch_irqn;
+	}
 
 	cpts->pins = devm_pinctrl_get(cpts->dev);
 	if (IS_ERR(cpts->pins)) {
@@ -1411,7 +1442,21 @@ struct cpts *cpts_create(struct device *dev, void __iomem *regs,
 	cpts->cc_mult = cpts->cc.mult;
 
 #ifdef CONFIG_TI_1PPS_DM_TIMER
-	if (cpts->pps_tmr_irqn) {
+	spin_lock_init(&cpts->bc_mux_lock);
+	kthread_init_delayed_work(&cpts->pps_work, cpts_pps_kworker);
+	cpts->pps_kworker = kthread_create_worker(0, "pps0");
+
+	if (IS_ERR(cpts->pps_kworker)) {
+		ret = PTR_ERR(cpts->pps_kworker);
+		pr_err("failed to create cpts pps worker %d\n", ret);
+		return ERR_PTR(ret);
+	}
+
+	cpts->pps_enable = -1;
+	cpts->ref_enable = -1;
+	cpts->pps_offset = 0;
+
+	if (cpts->use_1pps_gen) {
 		ret = devm_request_irq(dev, cpts->pps_tmr_irqn,
 				       cpts_1pps_tmr_interrupt,
 				       0, "1pps_timer", cpts);
@@ -1420,9 +1465,16 @@ struct cpts *cpts_create(struct device *dev, void __iomem *regs,
 				cpts->pps_tmr_irqn, ret);
 			return ERR_PTR(ret);
 		}
+
+		pinctrl_select_state(cpts->pins, cpts->pin_state_pwm_off);
+		if (cpts->use_1pps_ref)
+			pinctrl_select_state(cpts->pins,
+					     cpts->pin_state_ref_off);
 	}
 
-	if (cpts->pps_latch_irqn) {
+	if (cpts->use_1pps_latch) {
+		struct clk *parent;
+
 		ret = devm_request_irq(dev, cpts->pps_latch_irqn,
 				       cpts_1pps_latch_interrupt,
 				       0, "1pps_latch", cpts);
@@ -1431,23 +1483,28 @@ struct cpts *cpts_create(struct device *dev, void __iomem *regs,
 				cpts->pps_latch_irqn, ret);
 			return ERR_PTR(ret);
 		}
-	}
 
-	if (cpts->use_1pps_gen || cpts->use_1pps_latch) {
-		ret = cpts_pps_init(cpts);
+		parent = clk_get(&cpts->odt2->pdev->dev,
+				 "abe_giclk_div");
+		if (IS_ERR(parent)) {
+			dev_err(dev, "abe_giclk_div not found\n");
+			return ERR_CAST(parent);
+		}
 
+		ret = clk_set_parent(cpts->odt2->fclk, parent);
 		if (ret < 0) {
-			dev_err(dev, "unable to init PPS resource (%d)\n",
-				ret);
+			dev_err(dev, "failed to set abe_giclk_div as parent\n");
 			return ERR_PTR(ret);
 		}
 
-		/* Enable 1PPS related features	*/
-		cpts->info.pps		= (cpts->use_1pps_gen) ? 1 : 0;
-		cpts->info.n_ext_ts	= (cpts->use_1pps_gen) ?
-					  CPTS_MAX_EXT_TS - 1 : CPTS_MAX_EXT_TS;
-		cpts->info.n_per_out	= (cpts->use_1pps_ref) ? 1 : 0;
+		pinctrl_select_state(cpts->pins, cpts->pin_state_latch_off);
 	}
+
+	/* Enable 1PPS related features	*/
+	cpts->info.pps		= (cpts->use_1pps_gen) ? 1 : 0;
+	cpts->info.n_ext_ts	= (cpts->use_1pps_gen) ?
+				  CPTS_MAX_EXT_TS - 1 : CPTS_MAX_EXT_TS;
+	cpts->info.n_per_out	= (cpts->use_1pps_ref) ? 1 : 0;
 #endif
 
 	return cpts;
@@ -1460,22 +1517,22 @@ void cpts_release(struct cpts *cpts)
 		return;
 
 #ifdef CONFIG_TI_1PPS_DM_TIMER
-	pinctrl_select_state(cpts->pins, cpts->pin_state_latch_off);
+	if (cpts->use_1pps_gen) {
+		pinctrl_select_state(cpts->pins, cpts->pin_state_pwm_off);
+		if (cpts->use_1pps_ref)
+			pinctrl_select_state(cpts->pins,
+					     cpts->pin_state_ref_off);
 
-	if (cpts->odt) {
-		cpts->odt_ops->disable(cpts->odt);
 		cpts->odt_ops->free(cpts->odt);
-	}
+	};
 
-	if (cpts->odt2) {
-		cpts->odt2_ops->disable(cpts->odt2);
+	if (cpts->use_1pps_latch) {
+		pinctrl_select_state(cpts->pins, cpts->pin_state_latch_off);
+
 		cpts->odt2_ops->free(cpts->odt2);
 	}
 
-	if (cpts->pps_kworker) {
-		kthread_cancel_delayed_work_sync(&cpts->pps_work);
-		kthread_destroy_worker(cpts->pps_kworker);
-	}
+	kthread_destroy_worker(cpts->pps_kworker);
 #endif
 
 	if (WARN_ON(!cpts->refclk))
@@ -1559,52 +1616,6 @@ static void cpts_latch_tmr_init(struct cpts *cpts)
 
 	cpts->pps_latch_state = INIT;
 	cpts->pps_latch_offset = 0;
-}
-
-static void cpts_tmr_init(struct cpts *cpts)
-{
-	struct clk *parent;
-	int ret;
-
-	if (!cpts)
-		return;
-
-	if (cpts->use_1pps_gen)	{
-
-		/* initialize timer16 for 1pps generator */
-		cpts_tmr_reinit(cpts);
-
-		writel_relaxed(OMAP_TIMER_INT_OVERFLOW, cpts->odt->irq_ena);
-		__omap_dm_timer_write(cpts->odt, OMAP_TIMER_WAKEUP_EN_REG,
-				      OMAP_TIMER_INT_OVERFLOW, 0);
-
-		pinctrl_select_state(cpts->pins, cpts->pin_state_pwm_off);
-		if (cpts->use_1pps_ref)
-			pinctrl_select_state(cpts->pins,
-					     cpts->pin_state_ref_off);
-	}
-
-	if (cpts->use_1pps_latch) {
-		parent = clk_get(&cpts->odt2->pdev->dev, "abe_giclk_div");
-		if (IS_ERR(parent)) {
-			pr_err("%s: %s not found\n", __func__, "abe_giclk_div");
-			return;
-		}
-
-		ret = clk_set_parent(cpts->odt2->fclk, parent);
-		if (ret < 0)
-			pr_err("%s: failed to set %s as parent\n", __func__,
-			       "abe_giclk_div");
-
-		/* initialize timer15 for 1pps latch */
-		cpts_latch_tmr_init(cpts);
-
-		writel_relaxed(OMAP_TIMER_INT_CAPTURE, cpts->odt2->irq_ena);
-		__omap_dm_timer_write(cpts->odt2, OMAP_TIMER_WAKEUP_EN_REG,
-				      OMAP_TIMER_INT_CAPTURE, 0);
-
-		pinctrl_select_state(cpts->pins, cpts->pin_state_latch_off);
-	}
 }
 
 static inline void cpts_turn_on_off_1pps_output(struct cpts *cpts, u64 ts)
